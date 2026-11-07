@@ -10,7 +10,7 @@ export const ago = (d?: Date | string | null) => {
   return `${Math.round(s / 86400)}d ago`;
 };
 
-export function Header({ tab }: { tab: "listings" | "offers" | "comps" }) {
+export function Header({ tab }: { tab: "listings" | "offers" | "comps" | "analyze" }) {
   return (
     <>
       <header className="top">
@@ -22,7 +22,11 @@ export function Header({ tab }: { tab: "listings" | "offers" | "comps" }) {
       <nav className="tabs">
         <Link href="/" className={tab === "listings" ? "on" : ""}>Listings</Link>
         <Link href="/offers" className={tab === "offers" ? "on" : ""}>Offers</Link>
+        <Link href="/analyze" className={tab === "analyze" ? "on" : ""}>Analyze address</Link>
         <Link href="/comps" className={tab === "comps" ? "on" : ""}>Comps</Link>
+        <form action="/analyze" style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <input type="search" name="address" placeholder="Analyze an address…" style={{ minWidth: 220 }} />
+        </form>
       </nav>
     </>
   );
