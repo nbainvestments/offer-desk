@@ -52,7 +52,7 @@ export const OFFER = {
 };
 
 export const COMPS = {
-  monthsBack: 12,
+  daysBack: 90,            // user rule: only sales closed in the last 90 days (market moving)
   radiusMiles: [0.5, 1, 2], // widen until enough comps
   sqftTolerance: 0.2,       // +/-20%
   sameBeds: true,

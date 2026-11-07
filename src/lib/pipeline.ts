@@ -9,6 +9,7 @@ import { assessPhotos } from "./photos";
 import { push } from "./notify";
 import { offerEmail, showingEmail } from "./emailDraft";
 import { ALERTS, BUY_BOX } from "./config";
+import { compUploadReminder } from "./reminders";
 import type { Listing, PhotoAssessment, SoldComp } from "./types";
 
 const DETAIL_PER_RUN = Number(process.env.DETAIL_PER_RUN ?? 25);
@@ -85,6 +86,7 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
       if (usedPhotos) photosUsed++;
       analyzed++;
     }
+    await compUploadReminder().catch(() => {});
     await sql`update scan_runs set finished_at = now(), matches = ${rows.length}, new_count = ${newCount}, changed_count = ${changed}, analyzed = ${analyzed} where id = ${run.id}`;
     return { matches: rows.length, newCount, changed, analyzed, backlog: Math.max(0, queue.length - analyzed) };
   } catch (e: any) {

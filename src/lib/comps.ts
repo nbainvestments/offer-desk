@@ -25,7 +25,7 @@ export function computeArv(subject: Listing, sold: SoldComp[], now = new Date())
     return { arv: null, arvPerSqft: null, comps: [], radiusUsed: null, warnings: ["Missing location or sqft — ARV not computed"] };
   }
   const cutoff = new Date(now);
-  cutoff.setMonth(cutoff.getMonth() - COMPS.monthsBack);
+  cutoff.setDate(cutoff.getDate() - COMPS.daysBack);
 
   const base = sold
     .filter((c) => new Date(c.closeDate) >= cutoff)

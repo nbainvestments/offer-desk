@@ -38,7 +38,7 @@ export default async function Listings({ searchParams }: { searchParams: Promise
            count(*) filter (where hidden = false and action = 'offer') ready,
            count(*) filter (where hidden = false and analyzed_at is null) backlog,
            (select count(*) from sold_comps) comps,
-           (select max(finished_at) from scan_runs where error is null) last_scan
+           (select max(finished_at) from scan_runs where error is null and matches is not null) last_scan
     from listings`;
 
   return (

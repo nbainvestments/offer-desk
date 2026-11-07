@@ -12,7 +12,7 @@ const subject: Listing = {
 };
 const comp = (price: number, dLat: number, beds = 3, sqft = 1500, remarks = "Renovated"): SoldComp => ({
   address: "c", lat: 39.47 + dLat, lon: -74.5, beds, sqft, propertyType: "sfr",
-  salePrice: price, closeDate: "2026-08-01", remarks,
+  salePrice: price, closeDate: "2026-09-15", remarks,
 });
 
 describe("keywords", () => {
