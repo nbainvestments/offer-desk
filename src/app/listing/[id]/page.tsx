@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { sql, migrate } from "@/db";
 import { Header, Score, ActionPill, OfferStatus, money, longDate } from "../../ui";
-import { saveOffer, approveOffer, rejectOffer, markSent, sendOffer, setSqft, setType } from "../../actions";
+import { saveOffer, approveOffer, rejectOffer, markSent, sendOffer, setType, setNumbers } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -52,13 +52,22 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
             </dl>
             {(l.offer_reasons ?? []).length > 0 && <ul className="note">{l.offer_reasons.map((r: string) => <li key={r}>{r}</li>)}</ul>}
             {(l.arv_warnings ?? []).length > 0 && <ul className="note">{l.arv_warnings.map((r: string) => <li key={r}>{r}</li>)}</ul>}
-            {!l.sqft && (
-              <form action={setSqft} className="filters" style={{ marginTop: 10 }}>
+            <div className="card" style={{ marginTop: 12, marginBottom: 0, background: "#0f1114" }}>
+              <h3 style={{ marginBottom: 4 }}>Your numbers → offer</h3>
+              <p className="sub" style={{ marginTop: 0 }}>
+                {l.action === "needs_data" ? <>Stuck because: <b>{[...(l.arv_warnings ?? []), ...(l.offer_reasons ?? [])].filter((r: string) => !/^Repairs set/.test(r)).join(" · ") || "missing data"}</b>. </> : null}
+                Fill what you know and save — it re-prices right away and drafts the offer. Leave a box empty to use the app's number.
+              </p>
+              <form action={setNumbers} className="filters">
                 <input type="hidden" name="listing_id" value={l.listing_id} />
-                <input type="number" name="sqft" placeholder="Enter sqft" />
-                <button className="ghost">Save sqft & re-analyze</button>
+                {!l.sqft && <label className="sub">Sqft <input type="number" name="sqft" placeholder="from XLeads" style={{ width: 110 }} /></label>}
+                <label className="sub">ARV <input type="text" name="arv" defaultValue={l.arv_override ?? ""} placeholder={l.arv ? String(l.arv) : "your ARV"} style={{ width: 120 }} /></label>
+                <label className="sub">Repairs <input type="text" name="repairs" defaultValue={l.repairs_override ?? ""} placeholder={l.repairs_high ? String(l.repairs_high) : "your estimate"} style={{ width: 120 }} /></label>
+                <button>Save & price offer</button>
+                <Link className="sub" href={`/analyze?address=${encodeURIComponent(l.address)}`}>Pick comps on Analyze →</Link>
               </form>
-            )}
+              {(l.arv_override || l.repairs_override != null) && <p className="sub" style={{ marginBottom: 0 }}>Using your {[l.arv_override && "ARV", l.repairs_override != null && "repairs"].filter(Boolean).join(" + ")}. Clear the box and save to go back to the app's numbers.</p>}
+            </div>
           </div>
 
           <div className="card">

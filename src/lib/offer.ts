@@ -18,17 +18,21 @@ export function decideOffer(
   arv: number | null,
   photo: PhotoAssessment,
   flood: { sfha: boolean | null },
+  user: { repairs?: number | null } = {},
 ): OfferDecision {
   const reasons: string[] = [];
-  if (!arv || !l.sqft) {
+  const userRepairs = user.repairs != null && user.repairs >= 0 ? user.repairs : null;
+  if (!arv || (!l.sqft && userRepairs == null)) {
     return { action: "needs_data", repairsLow: null, repairsHigh: null, offer: null, formula: "-", pctOfList: null, reasons: ["No ARV or sqft"] };
   }
 
-  const unknownCondition = photo.tier === "unknown" || !photo.hasInterior || photo.confidence < 0.5;
+  // Your repair number wins: you've judged the condition, so no "blind" 60% rule.
+  const unknownCondition = userRepairs == null && (photo.tier === "unknown" || !photo.hasInterior || photo.confidence < 0.5);
   const tier = photo.tier === "unknown" ? "heavy" : photo.tier; // assume heavy when blind
   const rate = REPAIR_PER_SQFT[tier];
-  const repairsLow = Math.round((rate.low * l.sqft) / 1000) * 1000;
-  const repairsHigh = Math.round((rate.high * l.sqft) / 1000) * 1000;
+  const repairsLow = userRepairs ?? Math.round((rate.low * (l.sqft ?? 0)) / 1000) * 1000;
+  const repairsHigh = userRepairs ?? Math.round((rate.high * (l.sqft ?? 0)) / 1000) * 1000;
+  if (userRepairs != null) reasons.push(`Repairs set by you: ${fmt(userRepairs)}`);
 
   // FEMA 50% rule: in a flood zone, big rehab may force elevation.
   if (flood.sfha && (tier === "heavy" || tier === "gut")) {
@@ -37,7 +41,7 @@ export function decideOffer(
 
   let offer: number;
   let formula: string;
-  const useDeep = unknownCondition || tier === "gut" || arv < OFFER.deepWhenArvBelow;
+  const useDeep = userRepairs == null && (unknownCondition || tier === "gut" || arv < OFFER.deepWhenArvBelow);
   if (useDeep) {
     offer = arv * OFFER.deepPctOfArv;
     formula = `ARV ${fmt(arv)} x ${OFFER.deepPctOfArv}`;
@@ -59,7 +63,8 @@ export function decideOffer(
   if (unknownCondition && l.listPrice <= arv * 0.75) {
     return { action: "showing_request", repairsLow, repairsHigh, offer, formula, pctOfList: pct, reasons: [...reasons, "List price already near buy zone; condition unknown -> request showing"] };
   }
-  if (pct < OFFER.minOfferPctOfList) {
+  if (pct < OFFER.minOfferPctOfList && userRepairs != null) reasons.push(`Heads up: offer is only ${(pct * 100).toFixed(0)}% of list`);
+  if (pct < OFFER.minOfferPctOfList && userRepairs == null) {
     return { action: "skip", repairsLow, repairsHigh, offer, formula, pctOfList: pct, reasons: [...reasons, `Offer only ${(pct * 100).toFixed(0)}% of list — watch for price drops instead`] };
   }
   return { action: "offer", repairsLow, repairsHigh, offer, formula, pctOfList: pct, reasons };

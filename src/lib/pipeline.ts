@@ -139,10 +139,14 @@ async function loadComps(): Promise<SoldComp[]> {
 export async function analyzeListing(c: CollabClient, id: number, event: Listing["event"], allowPhotos: boolean, isNew: boolean) {
   const L = await c.fullListing(id, event);
   // Respect a manual type correction (MLS data is sometimes mis-entered).
-  const [lock] = await sql`select type_locked, property_type, age55 from listings where listing_id = ${id}`;
+  const [lock] = await sql`select type_locked, property_type, age55, arv_override, repairs_override, sqft as sqft_db from listings where listing_id = ${id}`;
+  if (!L.sqft && lock?.sqft_db) L.sqft = lock.sqft_db; // sqft you typed in
   if (lock?.type_locked) { L.propertyType = lock.property_type; L.age55 = !!lock.age55; }
   const flood = L.lat != null && L.lon != null ? await floodZone(L.lat, L.lon) : { zone: null, sfha: null };
   const arvRes = computeArv(L, await loadComps());
+  const userArv = lock?.arv_override ?? null;
+  const userRepairs = lock?.repairs_override ?? null;
+  if (userArv) { arvRes.arv = userArv; arvRes.warnings = [`ARV set by you (comps estimate: ${arvRes.arvPerSqft ? "$" + arvRes.arvPerSqft.toLocaleString() : "none"})`]; }
 
   // Photo AI only on listings worth a look (saves cost): keywords, price cut, BOM, long DOM, or list well under ARV.
   const kw = scanRemarks(L.remarks);
@@ -163,9 +167,11 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
   }
 
   const sc = scoreListing(L, arvRes.arv);
-  const dec = decideOffer(L, arvRes.arv, photo, flood);
+  const dec = decideOffer(L, arvRes.arv, photo, flood, { repairs: userRepairs });
   // Guardrails: no shotgun offers on ordinary listings, and no offers on shaky ARVs.
-  if ((dec.action === "offer" || dec.action === "showing_request") && arvRes.warnings.some((w) => /unreliable|disagree/i.test(w))) {
+  const userSet = !!(userArv || userRepairs != null); // your numbers bypass the auto guardrails
+  if (userSet) { /* you decided — keep the offer */ }
+  else if ((dec.action === "offer" || dec.action === "showing_request") && arvRes.warnings.some((w) => /unreliable|disagree/i.test(w))) {
     dec.action = "needs_data";
     dec.reasons.push("ARV not reliable — check the comps before offering");
   } else if ((dec.action === "offer" || dec.action === "showing_request") && !worthPhotos) {
@@ -191,11 +197,14 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
 
   // Draft (never send) an offer / showing request if none exists yet.
   if (dec.action === "offer" || dec.action === "showing_request") {
-    const [has] = await sql`select 1 from offers where listing_id = ${id} and status <> 'rejected' limit 1`;
+    const [has] = await sql`select id, status from offers where listing_id = ${id} and status <> 'rejected' order by created_at desc limit 1`;
+    const meta = { address: L.address, city: L.city, mls_number: L.mlsNumber, agent_name: L.agentName ?? null };
+    const e = dec.action === "offer" ? offerEmail(meta, dec.offer!) : showingEmail(meta);
     if (!has) {
-      const meta = { address: L.address, city: L.city, mls_number: L.mlsNumber, agent_name: L.agentName ?? null };
-      const e = dec.action === "offer" ? offerEmail(meta, dec.offer!) : showingEmail(meta);
       await sql`insert into offers ${sql({ listing_id: id, kind: dec.action, price: dec.offer, to_email: L.agentEmail ?? null, subject: e.subject, body: e.body })}`;
+    } else if (has.status === "draft") {
+      // Numbers changed -> refresh the unapproved draft (approved/sent offers are never touched).
+      await sql`update offers set kind = ${dec.action}, price = ${dec.offer}, subject = ${e.subject}, body = ${e.body} where id = ${has.id}`;
     }
   }
 

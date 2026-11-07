@@ -6,6 +6,7 @@ import { geocode, floodZone } from "@/lib/flood";
 import { COMPS, OFFER, REPAIR_PER_SQFT } from "@/lib/config";
 import type { Listing, PropertyType, SoldComp } from "@/lib/types";
 import { Header, money, longDate } from "../ui";
+import { setNumbers } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -163,6 +164,16 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
                 <dt>60% of ARV</dt><dd>{money(offer60)}</dd>
                 {offer70 != null && subject.listPrice > 0 && <><dt>% of list</dt><dd>{Math.round((offer70 / subject.listPrice) * 100)}%</dd></>}
               </dl>
+              {subject.listingId && finalArv != null && (
+                <form action={setNumbers} className="filters" style={{ margin: "10px 0 0" }}>
+                  <input type="hidden" name="listing_id" value={subject.listingId} />
+                  <input type="hidden" name="arv" value={finalArv} />
+                  <input type="hidden" name="repairs" value={repairs ?? ""} />
+                  {subject.sqft && <input type="hidden" name="sqft" value={subject.sqft} />}
+                  <button>Save ARV{repairs != null ? " + repairs" : ""} to this listing</button>
+                  <span className="sub">→ re-prices it and drafts the offer</span>
+                </form>
+              )}
               {(arv?.warnings ?? []).map((w) => <p key={w} className="note" style={{ margin: "6px 0 0" }}>{w}</p>)}
               {subject.sqft && (
                 <p className="sub" style={{ marginBottom: 0 }}>

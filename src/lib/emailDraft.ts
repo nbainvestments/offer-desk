@@ -14,10 +14,13 @@ const firstName = (full?: string | null) => {
   const f = (full ?? "").trim().split(/\s+/)[0] ?? "";
   return f ? f[0].toUpperCase() + f.slice(1).toLowerCase() : "there";
 };
+/** Agents stuff marketing text into the address ("4993 Cardiff Ct END UNIT - Private side entrance!"). */
+export const cleanAddress = (a: string) => a.split(/\s+-\s+|!/)[0].replace(/\s+(END UNIT|CORNER UNIT)\b.*$/i, "").trim();
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 // No assignment language here by design — assignability goes in the contract ("and/or assigns").
-export function offerEmail(l: { address: string; city: string | null; mls_number: string; agent_name: string | null }, price: number) {
+export function offerEmail(l0: { address: string; city: string | null; mls_number: string; agent_name: string | null }, price: number) {
+  const l = { ...l0, address: cleanAddress(l0.address) };
   return {
     subject: `Cash Offer - ${l.address}, ${l.city ?? ""} - MLS ${l.mls_number}`,
     body: `Hi ${firstName(l.agent_name)},
@@ -36,7 +39,8 @@ ${signature()}`,
   };
 }
 
-export function showingEmail(l: { address: string; city: string | null; mls_number: string; agent_name: string | null }) {
+export function showingEmail(l0: { address: string; city: string | null; mls_number: string; agent_name: string | null }) {
+  const l = { ...l0, address: cleanAddress(l0.address) };
   return {
     subject: `Showing request - ${l.address} - MLS ${l.mls_number}`,
     body: `Hi ${firstName(l.agent_name)},
