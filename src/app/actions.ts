@@ -56,7 +56,8 @@ const num = (v: FormDataEntryValue | null) => { const n = Number(String(v ?? "")
 export async function setNumbers(form: FormData) {
   const id = Number(form.get("listing_id"));
   const arv = num(form.get("arv")), repairs = num(form.get("repairs")), sqft = num(form.get("sqft"));
-  await sql`update listings set arv_override = ${arv}, repairs_override = ${repairs}${sqft ? sql`, sqft = ${sqft}` : sql``} where listing_id = ${id}`;
+  const compIds = form.has("comp_ids") ? String(form.get("comp_ids") ?? "").split(",").map(Number).filter(Boolean) : undefined;
+  await sql`update listings set arv_override = ${arv}, repairs_override = ${repairs}${sqft ? sql`, sqft = ${sqft}` : sql``}${compIds ? sql`, user_comp_ids = ${compIds.length ? sql.json(compIds) : null}` : sql``} where listing_id = ${id}`;
   const [row] = await sql`select event from listings where listing_id = ${id}`;
   await analyzeListing(collabClient(), id, (row?.event as any) ?? "new", false, false);
   revalidatePath(`/listing/${id}`); revalidatePath("/"); revalidatePath("/offers");

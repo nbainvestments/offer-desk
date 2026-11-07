@@ -1,6 +1,6 @@
 import { sql, migrate } from "@/db";
 import { CollabClient } from "./ingest/collab";
-import { computeArv } from "./comps";
+import { computeArv, milesBetween } from "./comps";
 import { decideOffer } from "./offer";
 import { scoreListing } from "./score";
 import { scanRemarks } from "./keywords";
@@ -104,7 +104,8 @@ export async function processCompQueue(c: CollabClient, deadlineMs: number, max 
       try {
         const L = await c.fullListing(id, "sold");
         const salePrice = (L.raw.soldPrice as number | undefined) ?? L.listPrice;
-        if (L.propertyType !== "other" && L.propertyType !== "land" && L.lat != null && salePrice) {
+        // skip land/unknown, and junk "sales" (rentals/typos like $490) that would poison an ARV
+        if (L.propertyType !== "other" && L.propertyType !== "land" && L.lat != null && salePrice && salePrice >= 10_000) {
           await sql`insert into sold_comps ${sql({
             listing_id: id, address: `${L.address}, ${L.city}`, lat: L.lat, lon: L.lon, beds: L.beds ?? null, baths: L.baths ?? null, sqft: L.sqft ?? null,
             property_type: L.propertyType, age55: !!L.age55, sale_price: salePrice, close_date: (L.raw.closeDate as string | undefined) ?? null, remarks: L.remarks,
@@ -128,7 +129,7 @@ async function upsertSold(r: any) {
 }
 
 async function loadComps(): Promise<SoldComp[]> {
-  const rows = await sql`select * from sold_comps where lat is not null and sqft is not null and sale_price is not null`;
+  const rows = await sql`select * from sold_comps where lat is not null and sqft is not null and sale_price >= 10000`;
   return rows.map((r: any) => ({
     address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
     propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(r.close_date), remarks: r.remarks ?? "",
@@ -139,14 +140,24 @@ async function loadComps(): Promise<SoldComp[]> {
 export async function analyzeListing(c: CollabClient, id: number, event: Listing["event"], allowPhotos: boolean, isNew: boolean) {
   const L = await c.fullListing(id, event);
   // Respect a manual type correction (MLS data is sometimes mis-entered).
-  const [lock] = await sql`select type_locked, property_type, age55, arv_override, repairs_override, sqft as sqft_db from listings where listing_id = ${id}`;
+  const [lock] = await sql`select type_locked, property_type, age55, arv_override, repairs_override, user_comp_ids, sqft as sqft_db from listings where listing_id = ${id}`;
   if (!L.sqft && lock?.sqft_db) L.sqft = lock.sqft_db; // sqft you typed in
   if (lock?.type_locked) { L.propertyType = lock.property_type; L.age55 = !!lock.age55; }
   const flood = L.lat != null && L.lon != null ? await floodZone(L.lat, L.lon) : { zone: null, sfha: null };
   const arvRes = computeArv(L, await loadComps());
   const userArv = lock?.arv_override ?? null;
   const userRepairs = lock?.repairs_override ?? null;
-  if (userArv) { arvRes.arv = userArv; arvRes.warnings = [`ARV set by you (comps estimate: ${arvRes.arvPerSqft ? "$" + arvRes.arvPerSqft.toLocaleString() : "none"})`]; }
+  // Comps you picked/verified replace the app's list on this listing.
+  const picks: number[] = Array.isArray(lock?.user_comp_ids) ? lock.user_comp_ids : [];
+  if (picks.length && userArv) {
+    const rows = await sql`select * from sold_comps where listing_id = any(${picks})`;
+    arvRes.comps = rows.map((r: any) => ({
+      address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
+      propertyType: r.property_type, salePrice: r.sale_price, closeDate: String(r.close_date),
+      miles: L.lat != null ? milesBetween(L.lat, L.lon!, r.lat, r.lon) : 0, mlsNumber: String(r.listing_id),
+    }));
+  }
+  if (userArv) { arvRes.arv = userArv; arvRes.warnings = [picks.length ? `ARV set by you from ${picks.length} comps you picked` : `ARV set by you`]; }
 
   // Photo AI only on listings worth a look (saves cost): keywords, price cut, BOM, long DOM, or list well under ARV.
   const kw = scanRemarks(L.remarks);

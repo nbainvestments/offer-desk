@@ -94,6 +94,7 @@ alter table listings add column if not exists type_locked boolean default false;
 alter table sold_comps add column if not exists baths numeric;
 alter table listings add column if not exists arv_override integer;
 alter table listings add column if not exists repairs_override integer;
+alter table listings add column if not exists user_comp_ids jsonb;
 
 create table if not exists scan_runs (
   id          serial primary key,

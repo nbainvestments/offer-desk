@@ -50,7 +50,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
   }
 
   // 2) Comps (last 90 days, retail only) + ARV using the same engine as the scanner.
-  const all: (SoldComp & { id: string })[] = (await sql`select * from sold_comps where lat is not null and sale_price is not null`).map((r: any) => ({
+  const all: (SoldComp & { id: string })[] = (await sql`select * from sold_comps where lat is not null and sale_price >= 10000`).map((r: any) => ({
     id: String(r.listing_id), mlsNumber: String(r.listing_id), address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
     propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(new Date(r.close_date).toISOString()), remarks: r.remarks ?? "",
   }));
@@ -169,8 +169,9 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
                   <input type="hidden" name="listing_id" value={subject.listingId} />
                   <input type="hidden" name="arv" value={finalArv} />
                   <input type="hidden" name="repairs" value={repairs ?? ""} />
+                  <input type="hidden" name="comp_ids" value={manualArv ? "" : pickedComps.length ? pickedComps.map((c) => c.id).join(",") : (arv?.comps ?? []).map((c) => String(c.mlsNumber)).join(",")} />
                   {subject.sqft && <input type="hidden" name="sqft" value={subject.sqft} />}
-                  <button>Save ARV{repairs != null ? " + repairs" : ""} to this listing</button>
+                  <button>Save ARV{pickedComps.length ? ` (${pickedComps.length} picked comps)` : ""}{repairs != null ? " + repairs" : ""} to this listing</button>
                   <span className="sub">→ re-prices it and drafts the offer</span>
                 </form>
               )}

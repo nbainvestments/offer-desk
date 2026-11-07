@@ -77,7 +77,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
           </div>
 
           <div className="card">
-            <h3>Comps used for ARV</h3>
+            <h3>Comps used for ARV{Array.isArray(l.user_comp_ids) && l.user_comp_ids.length ? <span className="pill blue" style={{ marginLeft: 8 }}>picked by you</span> : null}</h3>
             {(l.arv_comps ?? []).length === 0 ? <p className="sub">No comps yet.</p> : (
               <table style={{ minWidth: 0 }}>
                 <thead><tr><th>Address</th><th className="num">Beds</th><th className="num">Baths</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th><th className="num">Miles</th></tr></thead>
