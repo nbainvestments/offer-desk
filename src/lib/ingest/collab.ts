@@ -83,7 +83,7 @@ const FC = {
   price: 130010000, mls: 130010001, type: 130010003, address: 130010006, city: 130010008, zip: 130010010,
   status: 130010011, beds: 130010014, fullBaths: 130010015, halfBaths: 130010016, sqft: 120010178,
   listDate: 130010033, origPrice: 130010035, hoa: 120010179, taxes: 120010183, offMktDays: 130010480,
-  remarks: 540010551, age: 800010104, basement: 800010004, yearBuilt: 120010018,
+  remarks: 540010551, soldPrice: 130010045, closeDate: 130010044, age: 800010104, basement: 800010004, yearBuilt: 120010018,
 } as const;
 
 function fieldMap(fields: any[]) {
@@ -141,6 +141,7 @@ export function normalizeReport(rep: any, photoUrls: string[], event: Listing["e
     raw: {
       subtype: g("type"), status: g("status"), taxes: g("taxes"), age: g("age"),
       office: office?.name, officePhone: office?.phoneNumbers?.[0]?.formattedPhone,
+      soldPrice: num(g("soldPrice")), closeDate: g("closeDate") ? String(g("closeDate")).slice(0, 10) : undefined,
     },
   };
   return listing;

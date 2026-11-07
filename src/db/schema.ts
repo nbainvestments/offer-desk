@@ -81,6 +81,13 @@ create table if not exists offers (
 );
 create index if not exists offers_sent_at on offers (sent_at desc nulls last);
 
+create table if not exists comp_queue (
+  listing_id  bigint primary key,
+  added_at    timestamptz default now(),
+  done_at     timestamptz,
+  error       text
+);
+
 create table if not exists scan_runs (
   id          serial primary key,
   started_at  timestamptz default now(),

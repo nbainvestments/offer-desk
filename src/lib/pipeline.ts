@@ -68,6 +68,13 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
     const live = rows.map((r: any) => Number(r.listingId));
     if (live.length) await sql`update listings set hidden = true where listing_id <> all(${live}) and hidden = false`;
 
+    // Sold comps queued from an uploaded MLS export: fetch full details (fast, no AI).
+    const compsLoaded = await processCompQueue(c, deadlineMs - 25_000);
+    if (compsLoaded > 0) {
+      // New comps -> re-price listings that had no ARV (photo reads are reused, not re-run).
+      await sql`update listings set analyzed_at = null where arv is null and hidden = false and analyzed_at is not null`;
+    }
+
     // newest/changed first, then backlog
     queue.sort((a, b) => Number(b.isNew || b.event !== "new") - Number(a.isNew || a.event !== "new"));
     let analyzed = 0, photosUsed = 0;
@@ -83,6 +90,31 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
     await sql`update scan_runs set finished_at = now(), error = ${String(e?.message ?? e)} where id = ${run.id}`;
     throw e;
   }
+}
+
+export async function processCompQueue(c: CollabClient, deadlineMs: number, max = 60) {
+  const ids = (await sql`select listing_id from comp_queue where done_at is null order by added_at limit ${max}`).map((r: any) => Number(r.listing_id));
+  let loaded = 0;
+  for (let i = 0; i < ids.length; i += 6) {
+    if (Date.now() > deadlineMs) break;
+    await Promise.all(ids.slice(i, i + 6).map(async (id) => {
+      try {
+        const L = await c.fullListing(id, "sold");
+        const salePrice = (L.raw.soldPrice as number | undefined) ?? L.listPrice;
+        if (L.propertyType !== "other" && L.lat != null && salePrice) {
+          await sql`insert into sold_comps ${sql({
+            listing_id: id, address: `${L.address}, ${L.city}`, lat: L.lat, lon: L.lon, beds: L.beds ?? null, sqft: L.sqft ?? null,
+            property_type: L.propertyType, sale_price: salePrice, close_date: (L.raw.closeDate as string | undefined) ?? null, remarks: L.remarks,
+          })} on conflict (listing_id) do update set sale_price = excluded.sale_price, close_date = excluded.close_date, sqft = excluded.sqft, beds = excluded.beds, remarks = excluded.remarks`;
+          loaded++;
+        }
+        await sql`update comp_queue set done_at = now(), error = null where listing_id = ${id}`;
+      } catch (e: any) {
+        await sql`update comp_queue set done_at = now(), error = ${String(e?.message ?? e).slice(0, 200)} where listing_id = ${id}`;
+      }
+    }));
+  }
+  return loaded;
 }
 
 async function upsertSold(r: any) {
@@ -114,13 +146,26 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
       (arvRes.arv != null && L.listPrice <= arvRes.arv * 0.85));
   let photo: PhotoAssessment = { tier: "unknown", hasInterior: false, confidence: 0, notes: worthPhotos ? "Photo check pending" : "Not screened (no distress signals)" };
   let used = false;
-  if (worthPhotos && allowPhotos) {
+  // Reuse an earlier photo read (re-pricing after new comps shouldn't pay for AI again).
+  const [prior] = await sql`select condition_tier, condition_notes, has_interior from listings where listing_id = ${id}`;
+  const havePrior = prior?.condition_tier && prior.condition_tier !== "unknown";
+  if (havePrior) {
+    photo = { tier: prior.condition_tier, hasInterior: !!prior.has_interior, confidence: 0.8, notes: prior.condition_notes ?? "" };
+  } else if (worthPhotos && allowPhotos) {
     photo = await assessPhotos(spreadPhotos(L.photoUrls));
     used = true;
   }
 
   const sc = scoreListing(L, arvRes.arv);
   const dec = decideOffer(L, arvRes.arv, photo, flood);
+  // Guardrails: no shotgun offers on ordinary listings, and no offers on shaky ARVs.
+  if ((dec.action === "offer" || dec.action === "showing_request") && arvRes.warnings.some((w) => /unreliable|disagree/i.test(w))) {
+    dec.action = "needs_data";
+    dec.reasons.push("ARV not reliable — check the comps before offering");
+  } else if ((dec.action === "offer" || dec.action === "showing_request") && !worthPhotos) {
+    dec.action = "skip";
+    dec.reasons.push("No distress signals and not priced below ARV — watching for a price drop");
+  }
   if (flood.sfha) sc.signals.push(`Flood zone ${flood.zone}`);
 
   await sql`update listings set ${sql({
@@ -132,7 +177,7 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
     office_name: String(L.raw.office ?? ""), photo_urls: sql.json(L.photoUrls), event,
     keyword_hits: sql.json(sc.keywordHits), signals: sql.json(sc.signals), score: sc.score,
     arv: arvRes.arv, arv_comps: sql.json(arvRes.comps as any), arv_warnings: sql.json(arvRes.warnings),
-    ...(used || !worthPhotos ? { condition_tier: photo.tier, condition_notes: photo.notes, has_interior: photo.hasInterior } : {}),
+    ...(used || (!worthPhotos && !havePrior) ? { condition_tier: photo.tier, condition_notes: photo.notes, has_interior: photo.hasInterior } : {}),
     repairs_low: dec.repairsLow, repairs_high: dec.repairsHigh, flood_zone: flood.zone, flood_sfha: flood.sfha,
     action: dec.action, offer_price: dec.offer, offer_formula: dec.formula, offer_reasons: sql.json(dec.reasons),
     analyzed_at: new Date(),
