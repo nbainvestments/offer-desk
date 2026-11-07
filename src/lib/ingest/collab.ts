@@ -83,7 +83,7 @@ const FC = {
   price: 130010000, mls: 130010001, type: 130010003, address: 130010006, city: 130010008, zip: 130010010,
   status: 130010011, beds: 130010014, fullBaths: 130010015, halfBaths: 130010016, sqft: 120010178,
   listDate: 130010033, origPrice: 130010035, hoa: 120010179, taxes: 120010183, offMktDays: 130010480,
-  remarks: 540010551, soldPrice: 130010045, closeDate: 130010044, age: 800010104, basement: 800010004, yearBuilt: 120010018,
+  style: 120010083, address2: 130010007, adult55: 120010700, remarks: 540010551, soldPrice: 130010045, closeDate: 130010044, age: 800010104, basement: 800010004, yearBuilt: 120010018,
 } as const;
 
 function fieldMap(fields: any[]) {
@@ -97,15 +97,29 @@ function fieldMap(fields: any[]) {
   return m;
 }
 
-function typeOf(subtype: string): PropertyType {
-  const s = (subtype ?? "").toLowerCase();
-  if (/mobile|manufactured/.test(s)) return "other"; // mobile homes: no land, lot rent — not a flip comp
-  if (/condo/.test(s)) return "condo";
-  if (/town|twin|row/.test(s)) return "townhouse";
-  if (/duplex|2 family|3 family|4 family|multi|2-4/.test(s)) return "multi";
-  if (/land|lot/.test(s)) return "land";
-  if (/single|detached|cape|ranch|colonial|bi-level|split/.test(s)) return "sfr";
-  return "other";
+/**
+ * Category from MLS class + Style (SJSR labels all Residential "Single Family"; Style says Townhouse/Mobile etc).
+ * Falls back to HOA + wording for townhomes/condos the agent didn't mark.
+ */
+export function categorize(o: { classId?: number; type?: string; style?: string; address2?: string; remarks?: string; hoa?: number }): PropertyType {
+  if (o.classId === 5) return "condo";
+  if (o.classId === 4) return "multi";
+  if (o.classId === 2) return "land";
+  const t = `${o.type ?? ""} ${o.style ?? ""}`.toLowerCase();
+  if (/mobile|manufactured/.test(t)) return "mobile";
+  if (/condo/.test(t)) return "condo";
+  if (/town|twin|row/.test(t)) return "townhouse";
+  if (/duplex|triplex|quad|2 family|3 family|4 family|multi|2-4/.test(t)) return "multi";
+  if (/land|lot/.test(t) && !/single/.test(t)) return "land";
+  const words = `${o.address2 ?? ""} ${o.remarks ?? ""}`.toLowerCase();
+  if (/\bcondo(minium)?\b/.test(words) && (o.hoa ?? 0) > 0) return "condo";
+  if (/town ?home|town ?house|end[- ]unit|\btwin\b|row ?home/.test(words) && (o.hoa ?? 0) > 0) return "townhouse";
+  if (/\b(duplex|triplex|two[- ]family|2[- ]family|multi[- ]family)\b/.test(words)) return "multi";
+  return "sfr";
+}
+
+export function is55(flag: unknown, remarks?: string) {
+  return String(flag) === "1" || /\b55\s*\+|55 and (over|older)|active adult|age[- ]restricted/i.test(remarks ?? "");
 }
 
 const num = (v: any) => { const n = Number(String(v ?? "").replace(/[^0-9.]/g, "")); return Number.isFinite(n) && n > 0 ? n : undefined; };
@@ -128,7 +142,8 @@ export function normalizeReport(rep: any, photoUrls: string[], event: Listing["e
     beds: num(g("beds")),
     baths: full + 0.5 * half || undefined,
     sqft: saneSqft(num(g("sqft")), num(g("beds"))) ?? sqftFromRemarks(String(g("remarks") ?? "")),
-    propertyType: typeOf(String(g("type") ?? "")),
+    propertyType: categorize({ classId: Number(L.classCode?.id ?? L.classId) || undefined, type: String(g("type") ?? ""), style: String(g("style") ?? ""), address2: String(g("address2") ?? ""), remarks: String(g("remarks") ?? ""), hoa: num(g("hoa")) }),
+    age55: is55(g("adult55"), String(g("remarks") ?? "")),
     remarks: String(g("remarks") ?? ""),
     dom: g("listDate") ? Math.max(0, Math.floor((Date.now() - new Date(String(g("listDate"))).getTime()) / 86_400_000)) : undefined,
     listDate: g("listDate") ? String(g("listDate")) : undefined,
@@ -139,7 +154,7 @@ export function normalizeReport(rep: any, photoUrls: string[], event: Listing["e
     hoaMonthly: num(g("hoa")),
     photoUrls,
     raw: {
-      subtype: g("type"), status: g("status"), taxes: g("taxes"), age: g("age"),
+      subtype: [g("type"), g("style")].filter(Boolean).join(" / "), status: g("status"), taxes: g("taxes"), age: g("age"),
       office: office?.name, officePhone: office?.phoneNumbers?.[0]?.formattedPhone,
       soldPrice: num(g("soldPrice")), closeDate: g("closeDate") ? String(g("closeDate")).slice(0, 10) : undefined,
     },

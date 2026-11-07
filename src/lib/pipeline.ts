@@ -73,8 +73,8 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
     const compsLoaded = await processCompQueue(c, deadlineMs - 25_000);
     const [{ left }] = await sql`select count(*)::int as left from comp_queue where done_at is null`;
     if (compsLoaded > 0 && left === 0) {
-      // Upload fully imported -> re-price listings that had no ARV, once (photo reads are reused, not re-run).
-      await sql`update listings set analyzed_at = null where arv is null and hidden = false and analyzed_at is not null`;
+      // Upload fully imported -> re-price every active listing once with the fresh comps (photo reads are reused, not re-run).
+      await sql`update listings set analyzed_at = null where hidden = false and analyzed_at is not null`;
     }
 
     // newest/changed first, then backlog
@@ -104,11 +104,11 @@ export async function processCompQueue(c: CollabClient, deadlineMs: number, max 
       try {
         const L = await c.fullListing(id, "sold");
         const salePrice = (L.raw.soldPrice as number | undefined) ?? L.listPrice;
-        if (L.propertyType !== "other" && L.lat != null && salePrice) {
+        if (L.propertyType !== "other" && L.propertyType !== "land" && L.lat != null && salePrice) {
           await sql`insert into sold_comps ${sql({
             listing_id: id, address: `${L.address}, ${L.city}`, lat: L.lat, lon: L.lon, beds: L.beds ?? null, sqft: L.sqft ?? null,
-            property_type: L.propertyType, sale_price: salePrice, close_date: (L.raw.closeDate as string | undefined) ?? null, remarks: L.remarks,
-          })} on conflict (listing_id) do update set sale_price = excluded.sale_price, close_date = excluded.close_date, sqft = excluded.sqft, beds = excluded.beds, remarks = excluded.remarks`;
+            property_type: L.propertyType, age55: !!L.age55, sale_price: salePrice, close_date: (L.raw.closeDate as string | undefined) ?? null, remarks: L.remarks,
+          })} on conflict (listing_id) do update set sale_price = excluded.sale_price, close_date = excluded.close_date, sqft = excluded.sqft, beds = excluded.beds, remarks = excluded.remarks, property_type = excluded.property_type, age55 = excluded.age55`;
           loaded++;
         }
         await sql`update comp_queue set done_at = now(), error = null where listing_id = ${id}`;
@@ -131,20 +131,23 @@ async function loadComps(): Promise<SoldComp[]> {
   const rows = await sql`select * from sold_comps where lat is not null and sqft is not null and sale_price is not null`;
   return rows.map((r: any) => ({
     address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), sqft: r.sqft,
-    propertyType: r.property_type ?? "sfr", salePrice: r.sale_price, closeDate: String(r.close_date), remarks: r.remarks ?? "",
+    propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(r.close_date), remarks: r.remarks ?? "",
   }));
 }
 
 /** Full analysis of one listing. Returns true if photo AI was used. */
 export async function analyzeListing(c: CollabClient, id: number, event: Listing["event"], allowPhotos: boolean, isNew: boolean) {
   const L = await c.fullListing(id, event);
+  // Respect a manual type correction (MLS data is sometimes mis-entered).
+  const [lock] = await sql`select type_locked, property_type, age55 from listings where listing_id = ${id}`;
+  if (lock?.type_locked) { L.propertyType = lock.property_type; L.age55 = !!lock.age55; }
   const flood = L.lat != null && L.lon != null ? await floodZone(L.lat, L.lon) : { zone: null, sfha: null };
   const arvRes = computeArv(L, await loadComps());
 
   // Photo AI only on listings worth a look (saves cost): keywords, price cut, BOM, long DOM, or list well under ARV.
   const kw = scanRemarks(L.remarks);
   const worthPhotos =
-    L.listPrice <= BUY_BOX.maxListPrice && L.propertyType !== "other" && L.propertyType !== "land" &&
+    L.listPrice <= BUY_BOX.maxListPrice && L.propertyType !== "other" && L.propertyType !== "land" && L.propertyType !== "mobile" &&
     (kw.score >= 2 || event === "price_change" || event === "back_on_market" || (L.dom ?? 0) >= 60 ||
       (arvRes.arv != null && L.listPrice <= arvRes.arv * 0.85));
   let photo: PhotoAssessment = { tier: "unknown", hasInterior: false, confidence: 0, notes: worthPhotos ? "Photo check pending" : "Not screened (no distress signals)" };
@@ -174,7 +177,7 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
   await sql`update listings set ${sql({
     address: L.address, city: L.city, zip: L.zip ?? null, lat: L.lat ?? null, lon: L.lon ?? null,
     list_price: L.listPrice, original_price: L.originalListPrice ?? null, beds: L.beds ?? null, baths: L.baths ?? null,
-    sqft: L.sqft ?? null, property_type: L.propertyType, subtype: String(L.raw.subtype ?? ""), remarks: L.remarks,
+    sqft: L.sqft ?? null, property_type: L.propertyType, age55: !!L.age55, subtype: String(L.raw.subtype ?? ""), remarks: L.remarks,
     dom: L.dom ?? null, hoa_monthly: L.hoaMonthly ?? null, taxes: Number(L.raw.taxes) || null,
     agent_name: L.agentName ?? null, agent_email: L.agentEmail ?? null, agent_phone: L.agentPhone ?? null,
     office_name: String(L.raw.office ?? ""), photo_urls: sql.json(L.photoUrls), event,

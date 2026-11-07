@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queueComps } from "@/lib/compsImport";
+import { sql } from "@/db";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,12 @@ export async function POST(req: Request) {
   if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}` || !process.env.CRON_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const { ids } = await req.json();
+  const { ids, requeue } = await req.json();
+  if (requeue) {
+    // Re-fetch every comp already on file (e.g. after a categorization fix).
+    const r = await sql`update comp_queue set done_at = null, error = null`;
+    return NextResponse.json({ requeued: r.count });
+  }
   const clean = (Array.isArray(ids) ? ids : []).map(Number).filter((n) => n >= 100000 && n <= 9999999);
   const added = await queueComps(clean);
   return NextResponse.json({ received: clean.length, added });

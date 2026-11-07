@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { sql, migrate } from "@/db";
 import { Header, Score, ActionPill, OfferStatus, money } from "../../ui";
-import { saveOffer, approveOffer, rejectOffer, markSent, sendOffer, setSqft } from "../../actions";
+import { saveOffer, approveOffer, rejectOffer, markSent, sendOffer, setSqft, setType } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +28,19 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
             <h3>Numbers</h3>
             <dl className="kv">
               <dt>List price</dt><dd>{money(l.list_price)}{l.original_price && l.original_price > l.list_price ? ` (orig ${money(l.original_price)})` : ""}</dd>
+              <dt>Property type</dt><dd>
+                <form action={setType} style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <input type="hidden" name="listing_id" value={l.listing_id} />
+                  <select name="type" defaultValue={l.property_type ?? "sfr"}>
+                    <option value="sfr">Single family</option><option value="townhouse">Townhouse</option><option value="condo">Condo</option>
+                    <option value="multi">Multi-family</option><option value="mobile">Mobile home</option><option value="land">Land</option>
+                  </select>
+                  <label className="sub"><input type="checkbox" name="age55" value="1" defaultChecked={!!l.age55} /> 55+</label>
+                  <button className="ghost">Fix type & re-price</button>
+                  {l.type_locked && <span className="sub">(set by you)</span>}
+                </form>
+                <div className="sub">MLS says: {l.subtype || "—"}</div>
+              </dd>
               <dt>Beds / baths / sqft</dt><dd>{l.beds ?? "?"} / {l.baths ?? "?"} / {l.sqft ?? "?"}</dd>
               <dt>ARV</dt><dd>{money(l.arv)}</dd>
               <dt>Condition (AI)</dt><dd>{l.condition_tier ?? "—"}{l.condition_notes ? ` — ${l.condition_notes}` : ""}</dd>

@@ -27,7 +27,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
       subject = {
         listingId: Number(hit.listing_id), mlsNumber: hit.mls_number, address: hit.address, city: hit.city, lat: hit.lat, lon: hit.lon,
         listPrice: hit.list_price, beds: hit.beds != null ? Number(hit.beds) : undefined, sqft: hit.sqft ?? undefined,
-        propertyType: (hit.property_type ?? "sfr") as PropertyType, remarks: hit.remarks ?? "", event: "other", photoUrls: [],
+        propertyType: (hit.property_type ?? "sfr") as PropertyType, age55: !!hit.age55, remarks: hit.remarks ?? "", event: "other", photoUrls: [],
       };
       note = `Matched MLS listing ${hit.mls_number}.`;
     } else {
@@ -43,12 +43,13 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
     subject.beds = n(sp.beds) ?? subject.beds;
     subject.sqft = n(sp.sqft) ?? subject.sqft;
     if (sp.type) subject.propertyType = sp.type as PropertyType;
+    if (sp.type) subject.age55 = sp.a55 === "1";
   }
 
   // 2) Comps (last 90 days, retail only) + ARV using the same engine as the scanner.
   const all: (SoldComp & { id: string })[] = (await sql`select * from sold_comps where lat is not null and sale_price is not null`).map((r: any) => ({
     id: String(r.listing_id), mlsNumber: String(r.listing_id), address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), sqft: r.sqft,
-    propertyType: r.property_type ?? "sfr", salePrice: r.sale_price, closeDate: String(new Date(r.close_date).toISOString()), remarks: r.remarks ?? "",
+    propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(new Date(r.close_date).toISOString()), remarks: r.remarks ?? "",
   }));
   const usable = all.filter((c) => !excluded.has(c.id) && c.sqft);
   const arv = subject && subject.lat != null ? computeArv(subject, usable) : null;
@@ -61,7 +62,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
   const cutoff = Date.now() - COMPS.daysBack * 86_400_000;
   const nearby = subject?.lat != null
     ? all.map((c) => ({ ...c, miles: milesBetween(subject!.lat!, subject!.lon!, c.lat, c.lon) }))
-        .filter((c) => c.miles <= 2 && new Date(c.closeDate).getTime() >= cutoff)
+        .filter((c) => c.miles <= 2 && new Date(c.closeDate).getTime() >= cutoff && c.propertyType === subject!.propertyType && !!c.age55 === !!subject!.age55)
         .sort((a, b) => a.miles - b.miles).slice(0, 25)
     : [];
   const usedIds = new Set((arv?.comps ?? []).map((c) => String(c.mlsNumber)));
@@ -74,7 +75,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
 
   const keep = (extra: SP) => {
     const p = new URLSearchParams();
-    const merged = { address: q, beds: sp.beds, sqft: sp.sqft, type: sp.type, repairs: sp.repairs, arv: sp.arv, x: sp.x, i: sp.i, ...extra };
+    const merged = { address: q, beds: sp.beds, sqft: sp.sqft, type: sp.type, a55: sp.a55, repairs: sp.repairs, arv: sp.arv, x: sp.x, i: sp.i, ...extra };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/analyze?${p}`;
   };
@@ -100,8 +101,9 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
                 <label className="sub">Beds <input type="number" name="beds" defaultValue={subject.beds ?? ""} style={{ width: 70 }} /></label>
                 <label className="sub">Sqft <input type="number" name="sqft" defaultValue={subject.sqft ?? ""} style={{ width: 100 }} /></label>
                 <label className="sub">Type <select name="type" defaultValue={subject.propertyType}>
-                  <option value="sfr">Single family</option><option value="multi">2–4 unit</option><option value="condo">Condo</option><option value="townhouse">Townhouse</option>
+                  <option value="sfr">Single family</option><option value="townhouse">Townhouse</option><option value="condo">Condo</option><option value="multi">Multi-family</option><option value="mobile">Mobile home</option>
                 </select></label>
+                <label className="sub"><input type="checkbox" name="a55" value="1" defaultChecked={!!subject.age55} /> 55+</label>
                 <label className="sub">Est. repairs <input type="text" name="repairs" defaultValue={sp.repairs ?? ""} placeholder="$" style={{ width: 110 }} /></label>
                 <label className="sub">Your ARV (optional) <input type="text" name="arv" defaultValue={sp.arv ?? ""} placeholder="override" style={{ width: 110 }} /></label>
                 <button type="submit">Calculate</button>
@@ -136,7 +138,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
 
           <div className="card">
             <h3>Sold in last {COMPS.daysBack} days within 2 mi</h3>
-            <p className="sub" style={{ marginTop: 0 }}>✓ = auto-picked (same beds, ±20% sqft, not distressed). Click <b>Use</b> on your own 3–4 comps to set the ARV yourself, or Exclude to drop a bad one.</p>
+            <p className="sub" style={{ marginTop: 0 }}>Showing only <b>{subject.propertyType}{subject.age55 ? " · 55+" : " · not 55+"}</b> sales. ✓ = auto-picked (same beds, ±20% sqft, not distressed). Click <b>Use</b> on your own 3–4 comps to set the ARV yourself, or Exclude to drop a bad one.</p>
             {nearby.length === 0 ? <p className="sub">No sales on file nearby. Upload a fresh sold export on the Comps tab.</p> : (
               <div className="tablewrap"><table style={{ minWidth: 560 }}>
                 <thead><tr><th></th><th>Address</th><th className="num">Bd</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th><th className="num">Mi</th><th></th></tr></thead>

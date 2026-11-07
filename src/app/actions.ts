@@ -40,3 +40,11 @@ export async function setSqft(form: FormData) {
   await sql`update listings set sqft = ${sqft}, analyzed_at = null where listing_id = ${id}`; // re-analyzed next scan
   revalidatePath(`/listing/${id}`);
 }
+
+export async function setType(form: FormData) {
+  const id = Number(form.get("listing_id"));
+  const type = String(form.get("type") ?? "sfr");
+  const age55 = form.get("age55") === "1";
+  await sql`update listings set property_type = ${type}, age55 = ${age55}, type_locked = true, analyzed_at = null where listing_id = ${id}`;
+  revalidatePath(`/listing/${id}`); revalidatePath("/");
+}

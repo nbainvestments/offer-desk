@@ -29,7 +29,8 @@ export function computeArv(subject: Listing, sold: SoldComp[], now = new Date())
 
   const base = sold
     .filter((c) => new Date(c.closeDate) >= cutoff)
-    .filter((c) => sameTypeGroup(c.propertyType, subject.propertyType))
+    .filter((c) => c.propertyType === subject.propertyType) // condo-condo, townhouse-townhouse, multi-multi, sfr-sfr
+    .filter((c) => !!c.age55 === !!subject.age55)            // 55+ only comps 55+
     .filter((c) => !COMPS.sameBeds || subject.beds == null || c.beds === subject.beds)
     .filter((c) => Math.abs(c.sqft - subject.sqft!) / subject.sqft! <= COMPS.sqftTolerance)
     .filter((c) => !containsAny(c.remarks, DISTRESSED_COMP_WORDS)) // retail-condition only
@@ -55,9 +56,5 @@ export function computeArv(subject: Listing, sold: SoldComp[], now = new Date())
   return { arv: null, arvPerSqft: null, comps: [], radiusUsed: null, warnings: [`Fewer than ${COMPS.minComps} retail comps found`] };
 }
 
-function sameTypeGroup(a: string, b: string) {
-  const g = (t: string) => (t === "condo" || t === "townhouse" ? "attached" : t);
-  return g(a) === g(b);
-}
 const avg = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
 const round = (n: number) => Math.round(n / 1000) * 1000;

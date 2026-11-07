@@ -88,6 +88,10 @@ create table if not exists comp_queue (
   error       text
 );
 
+alter table listings add column if not exists age55 boolean default false;
+alter table sold_comps add column if not exists age55 boolean default false;
+alter table listings add column if not exists type_locked boolean default false;
+
 create table if not exists scan_runs (
   id          serial primary key,
   started_at  timestamptz default now(),

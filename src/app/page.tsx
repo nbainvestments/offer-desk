@@ -22,7 +22,7 @@ export default async function Listings({ searchParams }: { searchParams: Promise
 
   const rows = await sql`
     select listing_id, mls_number, address, city, list_price, original_price, beds, baths, sqft, arv, repairs_high,
-           offer_price, score, action, condition_tier, flood_zone, flood_sfha, first_seen, event, keyword_hits, property_type, analyzed_at
+           offer_price, score, action, condition_tier, flood_zone, flood_sfha, first_seen, event, keyword_hits, property_type, age55, analyzed_at
     from listings
     where hidden = false
       ${action ? sql`and action = ${action}` : sql``}
@@ -93,7 +93,7 @@ export default async function Listings({ searchParams }: { searchParams: Promise
               return (
                 <tr key={r.listing_id}>
                   <td><Score v={r.score ?? 0} /></td>
-                  <td><Link href={`/listing/${r.listing_id}`}>{r.address}</Link><div className="sub">{r.city} · {r.beds ?? "?"}bd {r.baths ?? "?"}ba · {r.property_type}</div></td>
+                  <td><Link href={`/listing/${r.listing_id}`}>{r.address}</Link><div className="sub">{r.city} · {r.beds ?? "?"}bd {r.baths ?? "?"}ba · {r.property_type}{r.age55 ? " · 55+" : ""}</div></td>
                   <td className="num">{money(r.list_price)}{cut > 0 && <div className="sub">−{cut}%</div>}</td>
                   <td className="num">{r.sqft ?? "—"}</td>
                   <td className="num">{money(r.arv)}</td>

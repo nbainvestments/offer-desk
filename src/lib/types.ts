@@ -1,6 +1,6 @@
 import type { ConditionTier } from "./config";
 
-export type PropertyType = "sfr" | "multi" | "condo" | "townhouse" | "land" | "other";
+export type PropertyType = "sfr" | "multi" | "condo" | "townhouse" | "mobile" | "land" | "other";
 
 export interface Listing {
   mlsNumber: string;
@@ -24,6 +24,7 @@ export interface Listing {
   agentEmail?: string;
   agentPhone?: string;
   hoaMonthly?: number;
+  age55?: boolean; // 55+ / active adult community
   photoUrls: string[];
   sourceUrl?: string;
 }
@@ -36,6 +37,7 @@ export interface SoldComp {
   beds: number;
   sqft: number;
   propertyType: PropertyType;
+  age55?: boolean;
   salePrice: number;
   closeDate: string; // ISO
   remarks?: string;
