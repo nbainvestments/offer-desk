@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Simple password gate for the whole dashboard (MLS data is not public).
 export function middleware(req: NextRequest) {
-  if (req.nextUrl.pathname.startsWith("/api/scan")) return NextResponse.next(); // has its own secret
+  if (req.nextUrl.pathname.startsWith("/api/scan") || req.nextUrl.pathname.startsWith("/api/comps")) return NextResponse.next(); // own secret
   const pw = process.env.DASHBOARD_PASSWORD;
   if (!pw) return new NextResponse("Set DASHBOARD_PASSWORD", { status: 503 });
   const h = req.headers.get("authorization") ?? "";
