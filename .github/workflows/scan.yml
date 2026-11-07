@@ -1,7 +1,7 @@
-name: MLS scan
+name: MLS scan (manual backup)
+# Scans now run on Railway's built-in scheduler every 5 minutes.
+# This workflow is manual-only (Actions → Run workflow) as a backup.
 on:
-  schedule:
-    - cron: "*/5 * * * *"   # every 5 min (GitHub may delay a few minutes at busy times)
   workflow_dispatch: {}
 jobs:
   scan:

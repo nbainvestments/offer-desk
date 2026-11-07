@@ -23,5 +23,6 @@ export async function GET(req: Request) {
       else 'other' end reason, count(*)::int n
     from listings where hidden = false and (action = 'needs_data' or analyzed_at is null) group by 1 order by 2 desc`;
   const byType = await sql`select property_type, age55, count(*)::int n, count(*) filter (where action = 'needs_data')::int stuck from listings where hidden = false group by 1,2 order by 3 desc`;
-  return NextResponse.json({ comps, actions, stuck, byType });
+  const scans = await sql`select started_at, finished_at, matches, analyzed, error from scan_runs where matches is not null or error is not null order by id desc limit 5`;
+  return NextResponse.json({ comps, actions, stuck, byType, scans });
 }
