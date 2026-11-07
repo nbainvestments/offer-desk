@@ -1,0 +1,13 @@
+name: MLS scan
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 min (GitHub may delay a few minutes at busy times)
+  workflow_dispatch: {}
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trigger scan
+        run: |
+          curl -fsS --max-time 90 "${{ secrets.SCAN_URL }}/api/scan" -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

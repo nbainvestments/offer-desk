@@ -28,7 +28,7 @@ export class CollabClient {
     this.contactId = Number(payload.contactid);
   }
 
-  private async call<T = any>(path: string, body?: unknown): Promise<T> {
+  async call<T = any>(path: string, body?: unknown): Promise<T> {
     await this.auth();
     const r = await fetch(`${BASE}${path}`, {
       method: body ? "POST" : "GET",
@@ -127,10 +127,10 @@ export function normalizeReport(rep: any, photoUrls: string[], event: Listing["e
     originalListPrice: num(g("origPrice")),
     beds: num(g("beds")),
     baths: full + 0.5 * half || undefined,
-    sqft: num(g("sqft")),
+    sqft: saneSqft(num(g("sqft")), num(g("beds"))) ?? sqftFromRemarks(String(g("remarks") ?? "")),
     propertyType: typeOf(String(g("type") ?? "")),
     remarks: String(g("remarks") ?? ""),
-    dom: num(g("offMktDays")),
+    dom: g("listDate") ? Math.max(0, Math.floor((Date.now() - new Date(String(g("listDate"))).getTime()) / 86_400_000)) : undefined,
     listDate: g("listDate") ? String(g("listDate")) : undefined,
     event,
     agentName: agent?.formattedFullName,
@@ -144,4 +144,19 @@ export function normalizeReport(rep: any, photoUrls: string[], event: Listing["e
     },
   };
   return listing;
+}
+
+/** Agents often skip the SqFt field but mention it in remarks: "1,850 sq ft", "2100 sqft", "1,400 square feet". */
+export function sqftFromRemarks(remarks: string): number | undefined {
+  const m = remarks.match(/(\d{1,2},?\d{3})\s*(?:\+\s*)?(?:sq\.?\s*ft|sqft|square\s*f(?:ee|oo)t|sf\b)/i);
+  const n = m ? Number(m[1].replace(",", "")) : NaN;
+  return n >= 400 && n <= 10000 ? n : undefined;
+}
+
+/** Reject obvious agent typos (lot size entered as living area, etc.). */
+function saneSqft(sqft?: number, beds?: number) {
+  if (!sqft) return undefined;
+  if (sqft < 300) return undefined;
+  if (sqft > 6000 && (beds ?? 0) <= 4) return undefined;
+  return sqft;
 }
