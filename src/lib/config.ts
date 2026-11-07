@@ -56,6 +56,7 @@ export const COMPS = {
   radiusMiles: [0.5, 1, 2], // widen until enough comps
   sqftTolerance: 0.2,       // +/-20%
   sameBeds: true,
+  bathTolerance: 1,         // +/-1 bath (when both sides have baths)
   minComps: 3,
   maxComps: 4,
 };

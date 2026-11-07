@@ -19,24 +19,33 @@ export interface ArvResult {
   warnings: string[];
 }
 
-export function computeArv(subject: Listing, sold: SoldComp[], now = new Date()): ArvResult {
+export interface CompOpts { sqftTolerance?: number; bathTolerance?: number; radiusMiles?: number[] }
+
+/** Shared comp filter: same type, same 55+, same beds, baths ±1, sqft ±X%, last 90 days. */
+export function compMatches(subject: Listing, c: SoldComp, opts: CompOpts = {}, now = new Date()) {
+  const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - COMPS.daysBack);
+  const sqftTol = opts.sqftTolerance ?? COMPS.sqftTolerance;
+  const bathTol = opts.bathTolerance ?? COMPS.bathTolerance;
+  return new Date(c.closeDate) >= cutoff
+    && c.propertyType === subject.propertyType
+    && !!c.age55 === !!subject.age55
+    && (!COMPS.sameBeds || subject.beds == null || c.beds === subject.beds)
+    && (subject.baths == null || c.baths == null || Math.abs(c.baths - subject.baths) <= bathTol)
+    && (!subject.sqft || (!!c.sqft && Math.abs(c.sqft - subject.sqft) / subject.sqft <= sqftTol));
+}
+
+export function computeArv(subject: Listing, sold: SoldComp[], now = new Date(), opts: CompOpts = {}): ArvResult {
   const warnings: string[] = [];
   if (subject.lat == null || subject.lon == null || !subject.sqft) {
     return { arv: null, arvPerSqft: null, comps: [], radiusUsed: null, warnings: ["Missing location or sqft — ARV not computed"] };
   }
-  const cutoff = new Date(now);
-  cutoff.setDate(cutoff.getDate() - COMPS.daysBack);
-
+  const radii = opts.radiusMiles ?? COMPS.radiusMiles;
   const base = sold
-    .filter((c) => new Date(c.closeDate) >= cutoff)
-    .filter((c) => c.propertyType === subject.propertyType) // condo-condo, townhouse-townhouse, multi-multi, sfr-sfr
-    .filter((c) => !!c.age55 === !!subject.age55)            // 55+ only comps 55+
-    .filter((c) => !COMPS.sameBeds || subject.beds == null || c.beds === subject.beds)
-    .filter((c) => Math.abs(c.sqft - subject.sqft!) / subject.sqft! <= COMPS.sqftTolerance)
+    .filter((c) => compMatches(subject, c, opts, now))
     .filter((c) => !containsAny(c.remarks, DISTRESSED_COMP_WORDS)) // retail-condition only
     .map((c) => ({ ...c, miles: milesBetween(subject.lat!, subject.lon!, c.lat, c.lon) }));
 
-  for (const r of COMPS.radiusMiles) {
+  for (const r of radii) {
     const within = base.filter((c) => c.miles <= r);
     if (within.length >= COMPS.minComps) {
       // closest + most recent first
@@ -47,7 +56,7 @@ export function computeArv(subject: Listing, sold: SoldComp[], now = new Date())
       const ppsf = avg(picked.map((c) => c.salePrice / c.sqft));
       const arvPerSqft = ppsf * subject.sqft;
       if (Math.abs(arv - arvPerSqft) / arvPerSqft > 0.15) warnings.push("Comp average and $/sqft method disagree >15% — review comps");
-      if (r > COMPS.radiusMiles[0]) warnings.push(`Had to widen radius to ${r} mi`);
+      if (r > radii[0]) warnings.push(`Had to widen radius to ${r} mi`);
       const spread = Math.max(...picked.map((c) => c.salePrice)) / Math.min(...picked.map((c) => c.salePrice));
       if (spread > 1.4) warnings.push("Comp prices vary >40% — ARV unreliable");
       return { arv: round(arv), arvPerSqft: round(arvPerSqft), comps: picked, radiusUsed: r, warnings };
