@@ -70,8 +70,9 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
 
     // Sold comps queued from an uploaded MLS export: fetch full details (fast, no AI).
     const compsLoaded = await processCompQueue(c, deadlineMs - 25_000);
-    if (compsLoaded > 0) {
-      // New comps -> re-price listings that had no ARV (photo reads are reused, not re-run).
+    const [{ left }] = await sql`select count(*)::int as left from comp_queue where done_at is null`;
+    if (compsLoaded > 0 && left === 0) {
+      // Upload fully imported -> re-price listings that had no ARV, once (photo reads are reused, not re-run).
       await sql`update listings set analyzed_at = null where arv is null and hidden = false and analyzed_at is not null`;
     }
 
