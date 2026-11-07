@@ -14,6 +14,7 @@ nav.tabs { display: flex; gap: 6px; margin: 16px 0; flex-wrap: wrap; align-items
 nav.tabs a { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); color: var(--text); }
 nav.tabs a.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+a.kpi { color: var(--text); text-decoration: none; } a.kpi:hover { border-color: var(--accent); }
 .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .kpi b { display: block; font-size: 24px; }
 .kpi span { color: var(--muted); font-size: 12px; }
