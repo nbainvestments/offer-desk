@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { sql, migrate } from "@/db";
 import { mlsIdsFromCsv, queueComps } from "@/lib/compsImport";
-import { Header, money, ago } from "../ui";
+import { Header, money, ago, longDate } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ export default async function Comps() {
            (select max(close_date) from sold_comps) newest,
            (select count(*) from comp_queue where done_at is null) queued,
            (select count(*) from comp_queue where error is not null) errors`;
-  const recent = await sql`select address, beds, sqft, sale_price, close_date, property_type from sold_comps order by close_date desc nulls last limit 50`;
+  const recent = await sql`select address, beds, baths, sqft, sale_price, close_date, property_type from sold_comps order by close_date desc nulls last limit 50`;
 
   return (
     <div className="wrap">
@@ -31,8 +31,8 @@ export default async function Comps() {
       <div className="kpis">
         <div className="kpi"><b>{k.comps}</b><span>Sold comps on file</span></div>
         <div className="kpi"><b>{k.with_sqft}</b><span>With sqft (usable for ARV)</span></div>
-        <div className="kpi"><b>{k.oldest ? String(k.oldest).slice(4, 15) : "—"}</b><span>Oldest sale</span></div>
-        <div className="kpi"><b>{k.newest ? String(k.newest).slice(4, 15) : "—"}</b><span>Newest sale</span></div>
+        <div className="kpi"><b>{longDate(k.oldest)}</b><span>Oldest sale</span></div>
+        <div className="kpi"><b>{longDate(k.newest)}</b><span>Newest sale</span></div>
         <div className="kpi"><b>{k.queued}</b><span>Waiting to import</span></div>
       </div>
 
@@ -51,11 +51,11 @@ export default async function Comps() {
 
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Address</th><th>Type</th><th className="num">Beds</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th></tr></thead>
+          <thead><tr><th>Address</th><th>Type</th><th className="num">Beds</th><th className="num">Baths</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th></tr></thead>
           <tbody>
-            {recent.length === 0 && <tr><td colSpan={6} className="sub">No comps yet.</td></tr>}
+            {recent.length === 0 && <tr><td colSpan={7} className="sub">No comps yet.</td></tr>}
             {recent.map((r: any, i: number) => (
-              <tr key={i}><td>{r.address}</td><td>{r.property_type}</td><td className="num">{r.beds ?? "—"}</td><td className="num">{r.sqft ?? "—"}</td><td className="num">{money(r.sale_price)}</td><td>{r.close_date ? new Date(r.close_date).toLocaleDateString("en-US") : "—"} <span className="sub">{r.close_date ? ago(r.close_date) : ""}</span></td></tr>
+              <tr key={i}><td>{r.address}</td><td>{r.property_type}</td><td className="num">{r.beds ?? "—"}</td><td className="num">{r.baths ?? "—"}</td><td className="num">{r.sqft ?? "—"}</td><td className="num">{money(r.sale_price)}</td><td>{longDate(r.close_date)} <span className="sub">{r.close_date ? ago(r.close_date) : ""}</span></td></tr>
             ))}
           </tbody>
         </table>

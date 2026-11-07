@@ -4,7 +4,7 @@ import { computeArv, milesBetween } from "@/lib/comps";
 import { geocode, floodZone } from "@/lib/flood";
 import { COMPS, OFFER, REPAIR_PER_SQFT } from "@/lib/config";
 import type { Listing, PropertyType, SoldComp } from "@/lib/types";
-import { Header, money } from "../ui";
+import { Header, money, longDate } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
 
   // 2) Comps (last 90 days, retail only) + ARV using the same engine as the scanner.
   const all: (SoldComp & { id: string })[] = (await sql`select * from sold_comps where lat is not null and sale_price is not null`).map((r: any) => ({
-    id: String(r.listing_id), mlsNumber: String(r.listing_id), address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), sqft: r.sqft,
+    id: String(r.listing_id), mlsNumber: String(r.listing_id), address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
     propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(new Date(r.close_date).toISOString()), remarks: r.remarks ?? "",
   }));
   const usable = all.filter((c) => !excluded.has(c.id) && c.sqft);
@@ -141,12 +141,12 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
             <p className="sub" style={{ marginTop: 0 }}>Showing only <b>{subject.propertyType}{subject.age55 ? " · 55+" : " · not 55+"}</b> sales. ✓ = auto-picked (same beds, ±20% sqft, not distressed). Click <b>Use</b> on your own 3–4 comps to set the ARV yourself, or Exclude to drop a bad one.</p>
             {nearby.length === 0 ? <p className="sub">No sales on file nearby. Upload a fresh sold export on the Comps tab.</p> : (
               <div className="tablewrap"><table style={{ minWidth: 560 }}>
-                <thead><tr><th></th><th>Address</th><th className="num">Bd</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th><th className="num">Mi</th><th></th></tr></thead>
+                <thead><tr><th></th><th>Address</th><th className="num">Bd</th><th className="num">Ba</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th><th className="num">Mi</th><th></th></tr></thead>
                 <tbody>{nearby.map((c) => (
                   <tr key={c.id}>
                     <td>{picked.has(c.id) ? "★" : usedIds.has(c.id) ? "✓" : ""}</td>
-                    <td>{c.address}</td><td className="num">{c.beds || "—"}</td><td className="num">{c.sqft ?? "—"}</td>
-                    <td className="num">{money(c.salePrice)}</td><td>{new Date(c.closeDate).toLocaleDateString("en-US")}</td><td className="num">{c.miles.toFixed(2)}</td>
+                    <td>{c.address}</td><td className="num">{c.beds || "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft ?? "—"}</td>
+                    <td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles.toFixed(2)}</td>
                     <td style={{ display: "flex", gap: 10 }}>
                       {picked.has(c.id)
                         ? <Link href={keep({ i: [...picked].filter((v) => v !== c.id).join(",") })}>Unuse</Link>

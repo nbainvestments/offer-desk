@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { sql, migrate } from "@/db";
-import { Header, Score, ActionPill, OfferStatus, money } from "../../ui";
+import { Header, Score, ActionPill, OfferStatus, money, longDate } from "../../ui";
 import { saveOffer, approveOffer, rejectOffer, markSent, sendOffer, setSqft, setType } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -71,9 +71,9 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
             <h3>Comps used for ARV</h3>
             {(l.arv_comps ?? []).length === 0 ? <p className="sub">No comps yet.</p> : (
               <table style={{ minWidth: 0 }}>
-                <thead><tr><th>Address</th><th className="num">Sold</th><th className="num">Sqft</th><th>Closed</th><th className="num">Miles</th></tr></thead>
+                <thead><tr><th>Address</th><th className="num">Beds</th><th className="num">Baths</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th><th className="num">Miles</th></tr></thead>
                 <tbody>{l.arv_comps.map((c: any, i: number) => (
-                  <tr key={i}><td>{c.address}</td><td className="num">{money(c.salePrice)}</td><td className="num">{c.sqft}</td><td>{String(c.closeDate).slice(0, 10)}</td><td className="num">{c.miles?.toFixed(2)}</td></tr>
+                  <tr key={i}><td>{c.address}</td><td className="num">{c.beds ?? "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft}</td><td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles?.toFixed(2)}</td></tr>
                 ))}</tbody>
               </table>
             )}

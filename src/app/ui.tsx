@@ -1,6 +1,16 @@
 import Link from "next/link";
 
 export const money = (n?: number | null) => (n == null ? "—" : `$${Number(n).toLocaleString("en-US")}`);
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
+/** "Sept 10, 2026" — date-only values are read as calendar dates (no timezone shift). */
+export const longDate = (d?: Date | string | null) => {
+  if (!d) return "—";
+  const iso = typeof d === "string" ? d : d.toISOString();
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+  const x = new Date(d);
+  return isNaN(+x) ? "—" : `${MONTHS[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`;
+};
 export const pct = (n?: number | null) => (n == null ? "—" : `${Math.round(n * 100)}%`);
 export const ago = (d?: Date | string | null) => {
   if (!d) return "—";

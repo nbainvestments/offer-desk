@@ -35,6 +35,7 @@ export interface SoldComp {
   lat: number;
   lon: number;
   beds: number;
+  baths?: number;
   sqft: number;
   propertyType: PropertyType;
   age55?: boolean;

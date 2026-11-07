@@ -106,9 +106,9 @@ export async function processCompQueue(c: CollabClient, deadlineMs: number, max 
         const salePrice = (L.raw.soldPrice as number | undefined) ?? L.listPrice;
         if (L.propertyType !== "other" && L.propertyType !== "land" && L.lat != null && salePrice) {
           await sql`insert into sold_comps ${sql({
-            listing_id: id, address: `${L.address}, ${L.city}`, lat: L.lat, lon: L.lon, beds: L.beds ?? null, sqft: L.sqft ?? null,
+            listing_id: id, address: `${L.address}, ${L.city}`, lat: L.lat, lon: L.lon, beds: L.beds ?? null, baths: L.baths ?? null, sqft: L.sqft ?? null,
             property_type: L.propertyType, age55: !!L.age55, sale_price: salePrice, close_date: (L.raw.closeDate as string | undefined) ?? null, remarks: L.remarks,
-          })} on conflict (listing_id) do update set sale_price = excluded.sale_price, close_date = excluded.close_date, sqft = excluded.sqft, beds = excluded.beds, remarks = excluded.remarks, property_type = excluded.property_type, age55 = excluded.age55`;
+          })} on conflict (listing_id) do update set sale_price = excluded.sale_price, close_date = excluded.close_date, sqft = excluded.sqft, beds = excluded.beds, baths = excluded.baths, remarks = excluded.remarks, property_type = excluded.property_type, age55 = excluded.age55`;
           loaded++;
         }
         await sql`update comp_queue set done_at = now(), error = null where listing_id = ${id}`;
@@ -130,7 +130,7 @@ async function upsertSold(r: any) {
 async function loadComps(): Promise<SoldComp[]> {
   const rows = await sql`select * from sold_comps where lat is not null and sqft is not null and sale_price is not null`;
   return rows.map((r: any) => ({
-    address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), sqft: r.sqft,
+    address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
     propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(r.close_date), remarks: r.remarks ?? "",
   }));
 }
