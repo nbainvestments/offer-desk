@@ -1,6 +1,6 @@
 import { sql, migrate } from "@/db";
 import { CollabClient } from "./ingest/collab";
-import { computeArv, milesBetween } from "./comps";
+import { computeArv, milesBetween, isOlderComp } from "./comps";
 import { decideOffer } from "./offer";
 import { scoreListing } from "./score";
 import { scanRemarks } from "./keywords";
@@ -155,6 +155,7 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
       address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
       propertyType: r.property_type, salePrice: r.sale_price, closeDate: String(r.close_date),
       miles: L.lat != null ? milesBetween(L.lat, L.lon!, r.lat, r.lon) : 0, mlsNumber: String(r.listing_id),
+      older: isOlderComp({ closeDate: String(r.close_date) }),
     }));
   }
   if (userArv) { arvRes.arv = userArv; arvRes.warnings = [picks.length ? `ARV set by you from ${picks.length} comps you picked` : `ARV set by you`]; }

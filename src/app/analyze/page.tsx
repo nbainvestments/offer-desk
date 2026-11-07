@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { sql, migrate } from "@/db";
-import { computeArv, compMatches, milesBetween } from "@/lib/comps";
+import { computeArv, compMatches, milesBetween, isOlderComp } from "@/lib/comps";
 import { taxRecordAt, taxRecordByAddress } from "@/lib/taxRecords";
 import { geocode, floodZone } from "@/lib/flood";
 import { COMPS, OFFER, REPAIR_PER_SQFT } from "@/lib/config";
@@ -66,13 +66,14 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
   const finalArv = manualArv ?? pickedArv ?? arv?.arv ?? null;
 
   // Nearby sales list (wider net so you can eyeball / exclude)
-  const cutoff = Date.now() - COMPS.daysBack * 86_400_000;
+  const cutoff = Date.now() - COMPS.fallbackDaysBack * 86_400_000; // list shows backup window too; older ones are flagged
   const maxR = radius ?? 2;
   const nearby = subject?.lat != null
     ? all.map((c) => ({ ...c, miles: milesBetween(subject!.lat!, subject!.lon!, c.lat, c.lon) }))
         .filter((c) => c.miles <= maxR && new Date(c.closeDate).getTime() >= cutoff && c.propertyType === subject!.propertyType && !!c.age55 === !!subject!.age55)
-        .filter((c) => showAll || compMatches(subject!, c, opts)) // beds exact, baths ±1, sqft ±tol
-        .sort((a, b) => a.miles - b.miles).slice(0, 40)
+        .filter((c) => showAll || compMatches(subject!, c, { ...opts, daysBack: COMPS.fallbackDaysBack })) // beds exact, baths ±1, sqft ±tol
+        .map((c) => ({ ...c, older: isOlderComp(c) }))
+        .sort((a, b) => Number(a.older) - Number(b.older) || a.miles - b.miles).slice(0, 50)
     : [];
   const tax = subject?.lat != null ? (await taxRecordAt(subject.lat, subject.lon!, subject.address)) ?? (await taxRecordByAddress(`${subject.address}, ${subject.city}`)) : null;
   const usedIds = new Set((arv?.comps ?? []).map((c) => String(c.mlsNumber)));
@@ -186,7 +187,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
           </div>
 
           <div className="card">
-            <h3>Sold in last {COMPS.daysBack} days within {maxR} mi</h3>
+            <h3>Sold within {maxR} mi <span className="sub">· last {COMPS.daysBack} days first, then {COMPS.daysBack + 1}–{COMPS.fallbackDaysBack} days flagged “older comp”</span></h3>
             <p className="sub" style={{ marginTop: 0 }}>
               {showAll
                 ? <>Showing <b>all {subject.propertyType}{subject.age55 ? " 55+" : ""}</b> sales (bed/bath/sqft filters off). <Link href={keep({ all: "" })}>Apply filters</Link></>
@@ -199,7 +200,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
                 <tbody>{nearby.map((c) => (
                   <tr key={c.id}>
                     <td>{picked.has(c.id) ? "★" : usedIds.has(c.id) ? "✓" : ""}</td>
-                    <td>{c.address}</td><td className="num">{c.beds || "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft ?? "—"}</td>
+                    <td>{c.address}{c.older && <span className="pill warn" style={{ marginLeft: 6 }}>older comp</span>}</td><td className="num">{c.beds || "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft ?? "—"}</td>
                     <td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles.toFixed(2)}</td>
                     <td style={{ display: "flex", gap: 10 }}>
                       {picked.has(c.id)

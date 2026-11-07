@@ -42,6 +42,7 @@ export interface SoldComp {
   salePrice: number;
   closeDate: string; // ISO
   remarks?: string;
+  older?: boolean; // 91–180 days old (backup comp)
 }
 
 export interface PhotoAssessment {

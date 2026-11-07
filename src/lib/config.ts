@@ -52,7 +52,8 @@ export const OFFER = {
 };
 
 export const COMPS = {
-  daysBack: 90,            // user rule: only sales closed in the last 90 days (market moving)
+  daysBack: 90,            // user rule: sales closed in the last 90 days (market moving)
+  fallbackDaysBack: 180,   // backup only: 91–180 day sales when recent comps are missing/weak, flagged "older comp"
   radiusMiles: [0.5, 1, 2], // widen until enough comps
   sqftTolerance: 0.2,       // +/-20%
   sameBeds: true,

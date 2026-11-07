@@ -82,7 +82,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
               <table style={{ minWidth: 0 }}>
                 <thead><tr><th>Address</th><th className="num">Beds</th><th className="num">Baths</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th><th className="num">Miles</th></tr></thead>
                 <tbody>{l.arv_comps.map((c: any, i: number) => (
-                  <tr key={i}><td>{c.address}</td><td className="num">{c.beds ?? "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft}</td><td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles?.toFixed(2)}</td></tr>
+                  <tr key={i}><td>{c.address}{c.older && <span className="pill warn" style={{ marginLeft: 6 }}>older comp</span>}</td><td className="num">{c.beds ?? "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft}</td><td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles?.toFixed(2)}</td></tr>
                 ))}</tbody>
               </table>
             )}
