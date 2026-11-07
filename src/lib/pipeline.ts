@@ -10,6 +10,8 @@ import { push } from "./notify";
 import { offerEmail, showingEmail } from "./emailDraft";
 import { ALERTS, BUY_BOX } from "./config";
 import { compUploadReminder } from "./reminders";
+import { lookupSqftOnline } from "./sqftLookup";
+import { takeAiBudget } from "./aiBudget";
 import type { Listing, PhotoAssessment, SoldComp } from "./types";
 
 const DETAIL_PER_RUN = Number(process.env.DETAIL_PER_RUN ?? 25);
@@ -77,6 +79,14 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
       await sql`update listings set analyzed_at = null where hidden = false and analyzed_at is not null`;
     }
 
+    // Fill missing sqft on recent sold comps from the web (brings them back into ARV matching).
+    const compSqft = await fillCompSqft(deadlineMs - 30_000);
+    if (compSqft > 0) {
+      const [{ pending }] = await sql`select count(*)::int as pending from sold_comps where sqft is null and sqft_lookup_at is null and sale_price >= 10000 and close_date >= now() - interval '180 days' and property_type in ('sfr','townhouse','condo','multi')`;
+      // Re-price stuck listings once the fill-in is done (or in small steady batches for new comps later).
+      if (pending === 0) await sql`update listings set analyzed_at = null where hidden = false and action = 'needs_data' and analyzed_at is not null`;
+    }
+
     // newest/changed first, then backlog
     queue.sort((a, b) => Number(b.isNew || b.event !== "new") - Number(a.isNew || a.event !== "new"));
     let analyzed = 0, photosUsed = 0;
@@ -93,6 +103,27 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
     await sql`update scan_runs set finished_at = now(), error = ${String(e?.message ?? e)} where id = ${run.id}`;
     throw e;
   }
+}
+
+const COMP_SQFT_PER_RUN = Number(process.env.COMP_SQFT_PER_RUN ?? 12);
+
+/** Web-lookup sqft for sold comps (last 180 days) that are missing it. Returns how many were filled. */
+export async function fillCompSqft(deadlineMs: number) {
+  const rows = await sql`select listing_id, address, beds, baths from sold_comps
+    where sqft is null and sqft_lookup_at is null and sale_price >= 10000 and property_type in ('sfr','townhouse','condo','multi')
+      and close_date >= now() - interval '180 days'
+    order by close_date desc limit ${COMP_SQFT_PER_RUN}`;
+  let filled = 0;
+  for (let i = 0; i < rows.length; i += 4) {
+    if (Date.now() > deadlineMs) break;
+    await Promise.all(rows.slice(i, i + 4).map(async (r: any) => {
+      if (!(await takeAiBudget("search"))) return;
+      const res = await lookupSqftOnline(r.address, r.beds != null ? Number(r.beds) : null, r.baths != null ? Number(r.baths) : null);
+      await sql`update sold_comps set sqft = coalesce(sqft, ${res.sqft}), sqft_source = ${res.sqft ? `web: ${res.source}` : null}, sqft_lookup_at = now() where listing_id = ${r.listing_id}`;
+      if (res.sqft) filled++;
+    }));
+  }
+  return filled;
 }
 
 export async function processCompQueue(c: CollabClient, deadlineMs: number, max = 60) {
@@ -132,7 +163,7 @@ async function loadComps(): Promise<SoldComp[]> {
   const rows = await sql`select * from sold_comps where lat is not null and sqft is not null and sale_price >= 10000`;
   return rows.map((r: any) => ({
     address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
-    propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(r.close_date), remarks: r.remarks ?? "",
+    propertyType: r.property_type ?? "sfr", age55: !!r.age55, sqftSource: r.sqft_source ?? undefined, salePrice: r.sale_price, closeDate: String(r.close_date), remarks: r.remarks ?? "",
   }));
 }
 
@@ -141,7 +172,16 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
   const L = await c.fullListing(id, event);
   // Respect a manual type correction (MLS data is sometimes mis-entered).
   const [lock] = await sql`select type_locked, property_type, age55, arv_override, repairs_override, user_comp_ids, sqft as sqft_db from listings where listing_id = ${id}`;
-  if (!L.sqft && lock?.sqft_db) L.sqft = lock.sqft_db; // sqft you typed in
+  if (!L.sqft && lock?.sqft_db) L.sqft = lock.sqft_db; // sqft you typed in / found earlier
+  let sqftSource: string | null = L.sqft && !lock?.sqft_db ? "MLS" : null;
+  if (!L.sqft && L.propertyType !== "land" && L.propertyType !== "mobile") {
+    const [prev] = await sql`select sqft_lookup_at from listings where listing_id = ${id}`;
+    if (!prev?.sqft_lookup_at && (await takeAiBudget("search"))) {
+      const res = await lookupSqftOnline(`${L.address}, ${L.city}`, L.beds, L.baths);
+      await sql`update listings set sqft_lookup_at = now() where listing_id = ${id}`;
+      if (res.sqft) { L.sqft = res.sqft; sqftSource = `web: ${res.source}`; }
+    }
+  }
   if (lock?.type_locked) { L.propertyType = lock.property_type; L.age55 = !!lock.age55; }
   const flood = L.lat != null && L.lon != null ? await floodZone(L.lat, L.lon) : { zone: null, sfha: null };
   const arvRes = computeArv(L, await loadComps());
@@ -155,6 +195,7 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
       address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
       propertyType: r.property_type, salePrice: r.sale_price, closeDate: String(r.close_date),
       miles: L.lat != null ? milesBetween(L.lat, L.lon!, r.lat, r.lon) : 0, mlsNumber: String(r.listing_id),
+      sqftSource: r.sqft_source ?? undefined,
       older: isOlderComp({ closeDate: String(r.close_date) }),
     }));
   }
@@ -174,7 +215,7 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
   if (havePrior) {
     photo = { tier: prior.condition_tier, hasInterior: !!prior.has_interior, confidence: 0.8, notes: prior.condition_notes ?? "" };
   } else if (worthPhotos && allowPhotos) {
-    photo = await assessPhotos(spreadPhotos(L.photoUrls));
+    photo = (await takeAiBudget("photo")) ? await assessPhotos(spreadPhotos(L.photoUrls)) : { tier: "unknown", hasInterior: false, confidence: 0, notes: "Daily AI limit reached — photo check tomorrow" };
     used = true;
   }
 
@@ -195,7 +236,7 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
   await sql`update listings set ${sql({
     address: L.address, city: L.city, zip: L.zip ?? null, lat: L.lat ?? null, lon: L.lon ?? null,
     list_price: L.listPrice, original_price: L.originalListPrice ?? null, beds: L.beds ?? null, baths: L.baths ?? null,
-    sqft: L.sqft ?? null, property_type: L.propertyType, age55: !!L.age55, subtype: String(L.raw.subtype ?? ""), remarks: L.remarks,
+    sqft: L.sqft ?? null, ...(sqftSource ? { sqft_source: sqftSource } : {}), property_type: L.propertyType, age55: !!L.age55, subtype: String(L.raw.subtype ?? ""), remarks: L.remarks,
     dom: L.dom ?? null, hoa_monthly: L.hoaMonthly ?? null, taxes: Number(L.raw.taxes) || null,
     agent_name: L.agentName ?? null, agent_email: L.agentEmail ?? null, agent_phone: L.agentPhone ?? null,
     office_name: String(L.raw.office ?? ""), photo_urls: sql.json(L.photoUrls), event,

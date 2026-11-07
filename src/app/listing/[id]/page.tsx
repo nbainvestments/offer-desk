@@ -41,7 +41,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
                 </form>
                 <div className="sub">MLS says: {l.subtype || "—"}</div>
               </dd>
-              <dt>Beds / baths / sqft</dt><dd>{l.beds ?? "?"} / {l.baths ?? "?"} / {l.sqft ?? "?"}</dd>
+              <dt>Beds / baths / sqft</dt><dd>{l.beds ?? "?"} / {l.baths ?? "?"} / {l.sqft ?? "?"}{l.sqft_source && l.sqft_source !== "MLS" ? <span className="pill blue" style={{ marginLeft: 6 }}>sqft {l.sqft_source}</span> : null}</dd>
               <dt>ARV</dt><dd>{money(l.arv)}</dd>
               <dt>Condition (AI)</dt><dd>{l.condition_tier ?? "—"}{l.condition_notes ? ` — ${l.condition_notes}` : ""}</dd>
               <dt>Repairs est.</dt><dd>{l.repairs_low != null ? `${money(l.repairs_low)} – ${money(l.repairs_high)}` : "—"}</dd>
@@ -82,7 +82,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
               <table style={{ minWidth: 0 }}>
                 <thead><tr><th>Address</th><th className="num">Beds</th><th className="num">Baths</th><th className="num">Sqft</th><th className="num">Sold</th><th>Closed</th><th className="num">Miles</th></tr></thead>
                 <tbody>{l.arv_comps.map((c: any, i: number) => (
-                  <tr key={i}><td>{c.address}{c.older && <span className="pill warn" style={{ marginLeft: 6 }}>older comp</span>}</td><td className="num">{c.beds ?? "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft}</td><td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles?.toFixed(2)}</td></tr>
+                  <tr key={i}><td>{c.address}{c.older && <span className="pill warn" style={{ marginLeft: 6 }}>older comp</span>}</td><td className="num">{c.beds ?? "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft}{c.sqftSource ? <span className="sub" title={`sqft from ${c.sqftSource}`}> (web)</span> : null}</td><td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles?.toFixed(2)}</td></tr>
                 ))}</tbody>
               </table>
             )}

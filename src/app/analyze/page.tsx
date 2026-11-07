@@ -52,7 +52,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
   // 2) Comps (last 90 days, retail only) + ARV using the same engine as the scanner.
   const all: (SoldComp & { id: string })[] = (await sql`select * from sold_comps where lat is not null and sale_price >= 10000`).map((r: any) => ({
     id: String(r.listing_id), mlsNumber: String(r.listing_id), address: r.address, lat: r.lat, lon: r.lon, beds: Number(r.beds), baths: r.baths != null ? Number(r.baths) : undefined, sqft: r.sqft,
-    propertyType: r.property_type ?? "sfr", age55: !!r.age55, salePrice: r.sale_price, closeDate: String(new Date(r.close_date).toISOString()), remarks: r.remarks ?? "",
+    propertyType: r.property_type ?? "sfr", age55: !!r.age55, sqftSource: r.sqft_source ?? undefined, salePrice: r.sale_price, closeDate: String(new Date(r.close_date).toISOString()), remarks: r.remarks ?? "",
   }));
   const tolPct = n(sp.tol) ?? COMPS.sqftTolerance * 100;
   const radius = n(sp.radius);
@@ -200,7 +200,7 @@ export default async function Analyze({ searchParams }: { searchParams: Promise<
                 <tbody>{nearby.map((c) => (
                   <tr key={c.id}>
                     <td>{picked.has(c.id) ? "★" : usedIds.has(c.id) ? "✓" : ""}</td>
-                    <td>{c.address}{c.older && <span className="pill warn" style={{ marginLeft: 6 }}>older comp</span>}</td><td className="num">{c.beds || "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft ?? "—"}</td>
+                    <td>{c.address}{c.older && <span className="pill warn" style={{ marginLeft: 6 }}>older comp</span>}</td><td className="num">{c.beds || "—"}</td><td className="num">{c.baths ?? "—"}</td><td className="num">{c.sqft ?? "—"}{c.sqftSource ? <span className="sub" title={`sqft from ${c.sqftSource}`}> (web)</span> : null}</td>
                     <td className="num">{money(c.salePrice)}</td><td>{longDate(c.closeDate)}</td><td className="num">{c.miles.toFixed(2)}</td>
                     <td style={{ display: "flex", gap: 10 }}>
                       {picked.has(c.id)

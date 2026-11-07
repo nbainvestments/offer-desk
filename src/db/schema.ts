@@ -95,6 +95,11 @@ alter table sold_comps add column if not exists baths numeric;
 alter table listings add column if not exists arv_override integer;
 alter table listings add column if not exists repairs_override integer;
 alter table listings add column if not exists user_comp_ids jsonb;
+alter table listings add column if not exists sqft_source text;
+alter table listings add column if not exists sqft_lookup_at timestamptz;
+alter table sold_comps add column if not exists sqft_source text;
+alter table sold_comps add column if not exists sqft_lookup_at timestamptz;
+create table if not exists ai_usage (day date not null, kind text not null, n integer not null default 0, primary key (day, kind));
 
 create table if not exists scan_runs (
   id          serial primary key,
