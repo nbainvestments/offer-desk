@@ -23,6 +23,9 @@ export async function GET(req: Request) {
       else 'other' end reason, count(*)::int n
     from listings where hidden = false and (action = 'needs_data' or analyzed_at is null) group by 1 order by 2 desc`;
   const byType = await sql`select property_type, age55, count(*)::int n, count(*) filter (where action = 'needs_data')::int stuck from listings where hidden = false group by 1,2 order by 3 desc`;
+  const [dupes] = await sql`select count(*)::int n from (select listing_id from offers where status <> 'rejected' group by 1 having count(*) > 1) x`;
+  const url = new URL(req.url); const lid = Number(url.searchParams.get("listing"));
+  const debug = lid ? { listing: (await sql`select listing_id, address, list_price, sqft, sqft_source, arv, offer_price, action, arv_warnings, analyzed_at from listings where listing_id = ${lid}`)[0], offers: await sql`select id, status, price, created_at from offers where listing_id = ${lid} order by id` } : undefined;
   const scans = await sql`select started_at, finished_at, matches, analyzed, error from scan_runs where matches is not null or error is not null order by id desc limit 5`;
-  return NextResponse.json({ comps, actions, stuck, byType, scans });
+  return NextResponse.json({ comps, actions, stuck, byType, scans, duplicateOffers: dupes.n, debug });
 }

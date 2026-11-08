@@ -33,7 +33,7 @@ export default async function Listings({ searchParams }: { searchParams: Promise
 
   const [k] = await sql`
     select count(*) filter (where hidden = false) total,
-           count(*) filter (where hidden = false and first_seen > now() - interval '24 hours') new24,
+           count(*) filter (where hidden = false and dom is not null and dom <= 1) new24,
            count(*) filter (where hidden = false and score >= 70) hot,
            count(*) filter (where hidden = false and action = 'offer') ready,
            count(*) filter (where hidden = false and analyzed_at is null) backlog,
@@ -46,7 +46,7 @@ export default async function Listings({ searchParams }: { searchParams: Promise
       <Header tab="listings" />
       <div className="kpis">
         <div className="kpi"><b>{k.total}</b><span>Active matches</span></div>
-        <div className="kpi"><b>{k.new24}</b><span>New in 24h</span></div>
+        <div className="kpi"><b>{k.new24}</b><span>Listed in last 24h</span></div>
         <div className="kpi"><b>{k.hot}</b><span>Hot (score 70+)</span></div>
         <div className="kpi"><b>{k.ready}</b><span>Offer ready</span></div>
         <div className="kpi"><b>{k.comps}</b><span>Sold comps on file</span></div>

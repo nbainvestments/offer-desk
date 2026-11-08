@@ -104,6 +104,12 @@ create table if not exists ai_usage (day date not null, kind text not null, n in
 -- one-time text fix on unsent offers (no-op once applied)
 update offers set body = replace(body, ' and let me know if they''d like to counter.', '.') where status in ('draft','approved') and body like '%like to counter.%';
 
+-- one open offer per listing: drop duplicate drafts (keep newest / keep any approved-sent), then enforce
+delete from offers a using offers b
+  where a.listing_id = b.listing_id and a.id <> b.id and a.status = 'draft' and b.status <> 'rejected'
+    and (b.status <> 'draft' or a.id < b.id);
+create unique index if not exists offers_one_open on offers (listing_id) where status <> 'rejected';
+
 create table if not exists scan_runs (
   id          serial primary key,
   started_at  timestamptz default now(),

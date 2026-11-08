@@ -256,7 +256,7 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
     const meta = { address: L.address, city: L.city, mls_number: L.mlsNumber, agent_name: L.agentName ?? null };
     const e = dec.action === "offer" ? offerEmail(meta, dec.offer!) : showingEmail(meta);
     if (!has) {
-      await sql`insert into offers ${sql({ listing_id: id, kind: dec.action, price: dec.offer, to_email: L.agentEmail ?? null, subject: e.subject, body: e.body })}`;
+      await sql`insert into offers ${sql({ listing_id: id, kind: dec.action, price: dec.offer, to_email: L.agentEmail ?? null, subject: e.subject, body: e.body })} on conflict (listing_id) where status <> 'rejected' do nothing`;
     } else if (has.status === "draft") {
       // Numbers changed -> refresh the unapproved draft (approved/sent offers are never touched).
       await sql`update offers set kind = ${dec.action}, price = ${dec.offer}, subject = ${e.subject}, body = ${e.body} where id = ${has.id}`;
