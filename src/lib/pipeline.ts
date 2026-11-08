@@ -39,8 +39,8 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
   const c = collabClient();
   try {
     const rows = await c.allMatches();
-    const existing = new Map<number, { list_price: number; status: string; analyzed_at: Date | null; event: string }>(
-      (await sql`select listing_id, list_price, status, analyzed_at, event from listings`).map((r: any) => [Number(r.listing_id), r]),
+    const existing = new Map<number, { list_price: number; status: string; analyzed_at: Date | null; event: string; sqft: number | null; sqft_lookup_at: Date | null; property_type: string | null }>(
+      (await sql`select listing_id, list_price, status, analyzed_at, event, sqft, sqft_lookup_at, property_type from listings`).map((r: any) => [Number(r.listing_id), r]),
     );
 
     const queue: { id: number; event: Listing["event"]; isNew: boolean }[] = [];
@@ -65,6 +65,8 @@ export async function runScan(deadlineMs = Date.now() + 50_000) {
         queue.push({ id, event, isNew: false });
       } else if (!prev.analyzed_at) {
         queue.push({ id, event: (prev.event as Listing["event"]) ?? "new", isNew: false }); // backlog from earlier runs
+      } else if (prev.sqft == null && prev.sqft_lookup_at == null && prev.property_type !== "land" && prev.property_type !== "mobile") {
+        queue.push({ id, event: (prev.event as Listing["event"]) ?? "new", isNew: false }); // missing sqft: web lookup + re-price
       }
     }
     // Remove listings no longer matched (sold/withdrawn off the search) from view
