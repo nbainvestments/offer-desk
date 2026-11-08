@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { sql, migrate } from "@/db";
 import { Header, Score, ActionPill, OfferStatus, money, longDate } from "../../ui";
 import { saveOffer, approveOffer, rejectOffer, markSent, sendOffer, setType, setNumbers } from "../../actions";
+import DealChat from "./DealChat";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
   const [l] = await sql`select * from listings where listing_id = ${Number(id)}`;
   if (!l) notFound();
   const offers = await sql`select * from offers where listing_id = ${l.listing_id} order by created_at desc`;
+  const chat = (await sql`select role, content from listing_chat where listing_id = ${l.listing_id} order by id`).map((r: any) => ({ role: r.role, content: r.content }));
   const sending = process.env.SENDING_ENABLED === "true";
   const mapUrl = l.lat ? `https://www.google.com/maps?q=${l.lat},${l.lon}` : null;
 
@@ -95,6 +97,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div>
+          <DealChat listingId={Number(l.listing_id)} initial={chat} />
           <div className="card">
             <h3>Listing agent</h3>
             <dl className="kv">

@@ -114,6 +114,15 @@ create unique index if not exists offers_one_open on offers (listing_id) where s
 update offers o set status = 'rejected', notes = 'auto-withdrawn: listing no longer offer-ready'
   from listings l where l.listing_id = o.listing_id and o.status = 'draft' and l.analyzed_at is not null and l.action not in ('offer','showing_request');
 
+create table if not exists listing_chat (
+  id serial primary key,
+  listing_id bigint not null,
+  role text not null,          -- user | ai
+  content text not null,
+  created_at timestamptz default now()
+);
+create index if not exists listing_chat_listing on listing_chat (listing_id, id);
+
 create table if not exists scan_runs (
   id          serial primary key,
   started_at  timestamptz default now(),
