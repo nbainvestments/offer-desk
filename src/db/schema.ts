@@ -110,6 +110,10 @@ delete from offers a using offers b
     and (b.status <> 'draft' or a.id < b.id);
 create unique index if not exists offers_one_open on offers (listing_id) where status <> 'rejected';
 
+-- withdraw stale drafts on listings that no longer have an offer (no-op once clean)
+update offers o set status = 'rejected', notes = 'auto-withdrawn: listing no longer offer-ready'
+  from listings l where l.listing_id = o.listing_id and o.status = 'draft' and l.analyzed_at is not null and l.action not in ('offer','showing_request');
+
 create table if not exists scan_runs (
   id          serial primary key,
   started_at  timestamptz default now(),

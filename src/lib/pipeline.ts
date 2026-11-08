@@ -261,6 +261,9 @@ export async function analyzeListing(c: CollabClient, id: number, event: Listing
       // Numbers changed -> refresh the unapproved draft (approved/sent offers are never touched).
       await sql`update offers set kind = ${dec.action}, price = ${dec.offer}, subject = ${e.subject}, body = ${e.body} where id = ${has.id}`;
     }
+  } else {
+    // Numbers no longer support an offer -> pull back any unapproved draft (approved/sent are never touched).
+    await sql`update offers set status = 'rejected', notes = ${"auto-withdrawn: " + (dec.reasons.at(-1) ?? dec.action)} where listing_id = ${id} and status = 'draft'`;
   }
 
   if (isNew && sc.score >= ALERTS.hotDealMinScore) {
