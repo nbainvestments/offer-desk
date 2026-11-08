@@ -101,6 +101,9 @@ alter table sold_comps add column if not exists sqft_source text;
 alter table sold_comps add column if not exists sqft_lookup_at timestamptz;
 create table if not exists ai_usage (day date not null, kind text not null, n integer not null default 0, primary key (day, kind));
 
+-- one-time text fix on unsent offers (no-op once applied)
+update offers set body = replace(body, ' and let me know if they''d like to counter.', '.') where status in ('draft','approved') and body like '%like to counter.%';
+
 create table if not exists scan_runs (
   id          serial primary key,
   started_at  timestamptz default now(),

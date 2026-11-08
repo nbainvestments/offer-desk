@@ -32,7 +32,7 @@ I'd like to submit an offer on ${l.address}${l.city ? `, ${l.city}` : ""} (MLS $
 - Close in ${OFFER.closeDays} days or as soon as title is clear
 - Buyer purchasing in as-is condition
 
-Proof of funds available on request. Please present to your seller and let me know if they'd like to counter.
+Proof of funds available on request. Please present to your seller.
 
 Thank you,
 ${signature()}`,
